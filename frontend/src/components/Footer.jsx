@@ -31,6 +31,9 @@ function Footer() {
         </div>
         <div className="footer-bottom">
           <p>&copy; 2025 TruthChain. Built for Walrus Haulout Hackathon.</p>
+          <div className="footer-links">
+            <a href="#terms">Terms and Conditions</a>
+          </div>
         </div>
       </div>
     </footer>

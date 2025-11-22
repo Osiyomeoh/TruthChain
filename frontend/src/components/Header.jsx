@@ -17,6 +17,7 @@ function Header() {
           <a href="#register">Register</a>
           <a href="#verify">Verify</a>
           <a href="#extension">Extension</a>
+          <a href="#terms">Terms</a>
           <ThemeToggle />
           <WalletButton />
         </nav>
