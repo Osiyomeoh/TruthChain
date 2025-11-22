@@ -123,11 +123,40 @@
 }
 
 .download-instructions code {
-  background: var(--color-white);
+  background: var(--color-bg-primary);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   font-family: 'Courier New', monospace;
   font-size: 12px;
+  color: var(--color-text-primary);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.installation-note {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--color-bg-primary);
+  border-left: 3px solid var(--color-sky-blue);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.installation-note strong {
+  color: var(--color-text-primary);
+}
+
+.download-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  align-items: stretch;
+}
+
+.download-buttons .btn {
+  width: 100%;
+  text-align: center;
 }
 
 .sui-info {

@@ -1,4 +1,5 @@
 import React from 'react'
+import { API_BASE } from '../config/api'
 import './ExtensionSection.css'
 import './Button.css'
 
@@ -40,22 +41,47 @@ function ExtensionSection() {
               <div className="download-instructions">
                 <h4>Installation Steps:</h4>
                 <ol>
-                  <li>Download the extension from the repository</li>
-                  <li>Open Chrome/Edge and go to <code>chrome://extensions/</code></li>
-                  <li>Enable "Developer mode" (toggle in top-right)</li>
-                  <li>Click "Load unpacked"</li>
-                  <li>Select the <code>browser-extension</code> folder</li>
+                  <li>
+                    <strong>Download:</strong> Click "Download Extension (ZIP)" button above
+                  </li>
+                  <li>
+                    <strong>Extract:</strong> Extract the downloaded ZIP file to a folder on your computer
+                  </li>
+                  <li>
+                    <strong>Open Chrome:</strong> Go to <code>chrome://extensions/</code> (or <code>edge://extensions/</code> for Edge)
+                  </li>
+                  <li>
+                    <strong>Enable Developer Mode:</strong> Toggle "Developer mode" in the top-right corner
+                  </li>
+                  <li>
+                    <strong>Load Extension:</strong> Click "Load unpacked" and select the extracted folder
+                  </li>
+                  <li>
+                    <strong>Done!</strong> The TruthChain icon should appear in your browser toolbar. Start browsing to see verification badges!
+                  </li>
                 </ol>
+                <div className="installation-note">
+                  <strong>Note:</strong> The extension works on all websites including Twitter, Instagram, Facebook, TikTok, and LinkedIn.
+                </div>
               </div>
 
-              <a 
-                href="https://github.com/yourusername/truthchain" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary"
-              >
-                Download Extension
-              </a>
+              <div className="download-buttons">
+                <a 
+                  href={`${API_BASE.replace('/v1', '/v1/extension/download')}`}
+                  className="btn btn-primary"
+                  download="truthchain-extension.zip"
+                >
+                  Download Extension (ZIP)
+                </a>
+                <a 
+                  href="https://github.com/Osiyomeoh/TruthChain" 
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary"
+                >
+                  View on GitHub
+                </a>
+              </div>
             </div>
           </div>
         </div>

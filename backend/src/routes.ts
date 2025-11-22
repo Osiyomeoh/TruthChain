@@ -7,6 +7,7 @@ import {
   getAttestationsByCreator
 } from './controllers/attestation';
 import { getCreatorReputation } from './services/reputation';
+import { packageExtension } from './services/extensionPackage';
 
 export function registerRoutes(app: Express) {
   // API v1 routes
@@ -85,6 +86,28 @@ export function registerRoutes(app: Express) {
     }
   });
   
+  // Extension download endpoint
+  app.get('/v1/extension/download', async (req, res) => {
+    try {
+      console.log('📦 Packaging browser extension for download...');
+      const zipBuffer = await packageExtension();
+      
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', 'attachment; filename="truthchain-extension.zip"');
+      res.setHeader('Content-Length', zipBuffer.length.toString());
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      
+      console.log(`✅ Extension packaged successfully (${zipBuffer.length} bytes)`);
+      res.send(zipBuffer);
+    } catch (error) {
+      console.error('❌ Failed to package extension:', error);
+      res.status(500).json({
+        error: 'Failed to package extension',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+  
   // Info endpoint
   app.get('/v1/info', (req, res) => {
     res.json({
@@ -98,7 +121,8 @@ export function registerRoutes(app: Express) {
         search: 'GET /v1/search?creator=...&source=...',
         stats: 'GET /v1/stats',
         creator: 'GET /v1/creator/:creator',
-        proxy: 'GET /v1/proxy?url=...'
+        proxy: 'GET /v1/proxy?url=...',
+        extension: 'GET /v1/extension/download'
       }
     });
   });
