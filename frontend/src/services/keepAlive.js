@@ -1,9 +1,9 @@
 // Keep-alive service to prevent Render free tier from spinning down
 // Pings the backend health endpoint every 10 minutes (Render spins down after 15 min inactivity)
 
-import { API_BASE } from '../config/api';
+import { API_BASE, KEEP_ALIVE_INTERVAL } from '../config/api';
 
-const PING_INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
+const PING_INTERVAL = KEEP_ALIVE_INTERVAL * 60 * 1000; // Convert minutes to milliseconds
 const HEALTH_ENDPOINT = '/health';
 
 let pingInterval = null;
