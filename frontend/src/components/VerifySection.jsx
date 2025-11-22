@@ -1,8 +1,7 @@
 import React, { useState } from 'react'
+import { API_BASE } from '../config/api'
 import './VerifySection.css'
 import './Button.css'
-
-const API_BASE = 'http://localhost:3000/v1'
 
 function VerifySection() {
   const [file, setFile] = useState(null)

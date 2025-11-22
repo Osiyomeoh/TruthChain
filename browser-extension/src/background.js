@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3000/v1';
+const API_BASE = 'https://truthchain-drow.onrender.com/v1';
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const hashCache = new Map(); // Map<hash, { cachedAt, ...result }>
 const pendingHashRequests = new Map(); // Map<hash, Promise>

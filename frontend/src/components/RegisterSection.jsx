@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useCurrentWallet, useSignAndExecuteTransaction } from '@mysten/dapp-kit'
 import { registerMediaWithWallet } from '../utils/walletRegistration'
+import { API_BASE } from '../config/api'
 import './RegisterSection.css'
 import './Button.css'
-
-const API_BASE = 'http://localhost:3000/v1'
 
 function RegisterSection() {
   const { isConnected, address } = useCurrentWallet()

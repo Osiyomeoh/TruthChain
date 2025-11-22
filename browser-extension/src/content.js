@@ -266,7 +266,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // If direct fetch fails (CORS), use backend proxy
         console.warn('Direct fetch failed, trying backend proxy:', fetchError);
         try {
-          const proxyUrl = `http://localhost:3000/v1/proxy?url=${encodeURIComponent(mediaUrl)}`;
+          const proxyUrl = `https://truthchain-drow.onrender.com/v1/proxy?url=${encodeURIComponent(mediaUrl)}`;
           response = await fetch(proxyUrl);
           if (!response.ok) {
             throw new Error(`Proxy fetch failed: HTTP ${response.status}`);
@@ -1237,7 +1237,7 @@ async function registerMedia(mediaUrl, options = {}) {
         // If direct fetch fails (CORS), use backend proxy
         console.warn('Direct fetch failed, trying backend proxy:', fetchError);
         try {
-          const proxyUrl = `http://localhost:3000/v1/proxy?url=${encodeURIComponent(mediaUrl)}`;
+          const proxyUrl = `https://truthchain-drow.onrender.com/v1/proxy?url=${encodeURIComponent(mediaUrl)}`;
           response = await fetch(proxyUrl);
           if (!response.ok) {
             throw new Error(`Proxy fetch failed: HTTP ${response.status}`);

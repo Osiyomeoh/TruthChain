@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: truthchain-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Add your environment variables in Render dashboard:
+      # - WALRUS_PUBLISHER_URL
+      # - WALRUS_AGGREGATOR_URL
+      # - SUI_RPC_URL
+      # - PACKAGE_ID
+      # - REGISTRY_OBJECT_ID
+      # - SUI_PRIVATE_KEY
+
