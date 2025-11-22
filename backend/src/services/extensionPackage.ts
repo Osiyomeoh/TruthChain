@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as archiver from 'archiver';
+import archiver from 'archiver';
 
 /**
  * Package browser extension into a zip file
@@ -33,7 +33,7 @@ export async function packageExtension(): Promise<Buffer> {
       resolve(buffer);
     });
 
-    archive.on('error', (err) => {
+    archive.on('error', (err: Error) => {
       reject(err);
     });
 
