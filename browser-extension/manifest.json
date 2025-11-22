@@ -1,0 +1,47 @@
+{
+    "manifest_version": 3,
+    "name": "TruthChain Verify",
+    "version": "1.0.0",
+    "description": "Instantly verify the authenticity of any image or video online",
+    "permissions": [
+      "contextMenus",
+      "activeTab",
+      "storage",
+      "scripting"
+    ],
+    "host_permissions": [
+      "<all_urls>"
+    ],
+    "background": {
+      "service_worker": "src/background.js"
+    },
+    "content_scripts": [
+      {
+        "matches": ["<all_urls>"],
+        "js": ["src/content.js"],
+        "css": ["src/content.css"]
+      }
+    ],
+    "action": {
+      "default_popup": "public/popup.html",
+      "default_icon": {
+        "16": "icons/truthchain-icon-blue.png",
+        "48": "icons/truthchain-icon-blue.png",
+        "128": "icons/truthchain-icon-blue.png"
+      }
+    },
+    "icons": {
+      "16": "icons/truthchain-icon-blue.png",
+      "48": "icons/truthchain-icon-blue.png",
+      "128": "icons/truthchain-icon-blue.png"
+    },
+    "web_accessible_resources": [
+      {
+        "resources": [
+          "icons/*.png",
+          "logo/*.png"
+        ],
+        "matches": ["<all_urls>"]
+      }
+    ]
+  }
