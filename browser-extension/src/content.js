@@ -1048,6 +1048,78 @@ function renderSidebarState(mediaUrl, { state, result, message }) {
     return;
   }
 
+  if (state === 'registration-success') {
+    const successPill = document.createElement('div');
+    successPill.className = 'truthchain-sidebar-status-pill verified';
+    successPill.textContent = '✓ Successfully Registered!';
+    sidebarContent.appendChild(successPill);
+
+    const successMessage = document.createElement('div');
+    successMessage.className = 'truthchain-sidebar-status';
+    successMessage.style.color = '#10B981';
+    successMessage.style.marginTop = '12px';
+    successMessage.textContent = 'Your media has been registered on Sui blockchain. Verifying...';
+    sidebarContent.appendChild(successMessage);
+
+    const metaList = document.createElement('div');
+    metaList.className = 'truthchain-sidebar-meta';
+    metaList.style.marginTop = '16px';
+
+    if (result.hash) {
+      const hashRow = document.createElement('div');
+      hashRow.className = 'truthchain-sidebar-meta-row';
+      hashRow.innerHTML = `<span>Hash</span><code>${result.hash.slice(0, 12)}…${result.hash.slice(-8)}</code>`;
+      metaList.appendChild(hashRow);
+    }
+
+    if (result.txDigest) {
+      const txRow = document.createElement('div');
+      txRow.className = 'truthchain-sidebar-meta-row';
+      const txLink = document.createElement('a');
+      txLink.href = `https://suiexplorer.com/txblock/${result.txDigest}?network=testnet`;
+      txLink.target = '_blank';
+      txLink.rel = 'noopener noreferrer';
+      txLink.style.color = '#0EA5E9';
+      txLink.style.textDecoration = 'none';
+      txLink.textContent = `${result.txDigest.slice(0, 12)}…${result.txDigest.slice(-8)}`;
+      txLink.addEventListener('mouseenter', () => {
+        txLink.style.textDecoration = 'underline';
+      });
+      txLink.addEventListener('mouseleave', () => {
+        txLink.style.textDecoration = 'none';
+      });
+      txRow.innerHTML = '<span>Transaction</span>';
+      const codeEl = document.createElement('code');
+      codeEl.appendChild(txLink);
+      txRow.appendChild(codeEl);
+      metaList.appendChild(txRow);
+    }
+
+    if (result.attestationId) {
+      const attRow = document.createElement('div');
+      attRow.className = 'truthchain-sidebar-meta-row';
+      attRow.innerHTML = `<span>Attestation ID</span><code>${result.attestationId.slice(0, 12)}…${result.attestationId.slice(-8)}</code>`;
+      metaList.appendChild(attRow);
+    }
+
+    if (result.walrus_blob_id) {
+      const walrusRow = document.createElement('div');
+      walrusRow.className = 'truthchain-sidebar-meta-row';
+      walrusRow.innerHTML = `<span>Walrus Blob</span><code>${result.walrus_blob_id.slice(0, 10)}…</code>`;
+      metaList.appendChild(walrusRow);
+    }
+
+    if (result.creator) {
+      const creatorRow = document.createElement('div');
+      creatorRow.className = 'truthchain-sidebar-meta-row';
+      creatorRow.innerHTML = `<span>Creator</span><code>${result.creator.slice(0, 10)}…${result.creator.slice(-6)}</code>`;
+      metaList.appendChild(creatorRow);
+    }
+
+    sidebarContent.appendChild(metaList);
+    return;
+  }
+
   if (!result) return;
 
   const statusPill = document.createElement('div');
@@ -1119,17 +1191,37 @@ async function registerMediaFromSidebar(mediaUrl) {
   if (!sidebarActiveMediaUrl || sidebarActiveMediaUrl !== mediaUrl) return;
   renderSidebarState(mediaUrl, { state: 'registering' });
   try {
-    await registerMedia(mediaUrl, { showBadge: false });
-    const verifyResult = await verifyMedia(mediaUrl, false);
-    if (verifyResult) {
-      mediaStatus.set(mediaUrl, verifyResult);
-      updateOverlayStatus(mediaUrl);
-      renderSidebarState(mediaUrl, { state: 'result', result: verifyResult });
-    } else {
-      renderSidebarState(mediaUrl, {
-        state: 'error',
-        message: 'Verification result unavailable. Please try again.'
+    const registrationResult = await registerMedia(mediaUrl, { showBadge: false });
+    
+    // Show success message with registration details
+    if (registrationResult && registrationResult.success) {
+      renderSidebarState(mediaUrl, { 
+        state: 'registration-success', 
+        result: registrationResult 
       });
+      
+      // After a short delay, verify and update to show verified status
+      setTimeout(async () => {
+        const verifyResult = await verifyMedia(mediaUrl, false);
+        if (verifyResult) {
+          mediaStatus.set(mediaUrl, verifyResult);
+          updateOverlayStatus(mediaUrl);
+          renderSidebarState(mediaUrl, { state: 'result', result: verifyResult });
+        }
+      }, 1000);
+    } else {
+      // If registration didn't return success, try to verify anyway
+      const verifyResult = await verifyMedia(mediaUrl, false);
+      if (verifyResult && verifyResult.status === 'verified') {
+        mediaStatus.set(mediaUrl, verifyResult);
+        updateOverlayStatus(mediaUrl);
+        renderSidebarState(mediaUrl, { state: 'result', result: verifyResult });
+      } else {
+        renderSidebarState(mediaUrl, {
+          state: 'error',
+          message: registrationResult?.error || 'Registration completed but verification unavailable. Please try again.'
+        });
+      }
     }
   } catch (error) {
     console.error('Sidebar registration error:', error);
@@ -1397,9 +1489,14 @@ async function registerMedia(mediaUrl, options = {}) {
       // Allow auto-verification to run again to show updated state
       processedAutoHashes.delete(hash);
       verifiedHashes.delete(hash);
+      
+      // Return the result so sidebar can display it
+      return result;
     } else if (showBadge) {
       showErrorBadge(mediaUrl, result.error || 'Registration failed');
     }
+    
+    return result;
       
     } catch (error) {
       console.error('Registration error:', error);
