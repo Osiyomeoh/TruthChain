@@ -52,26 +52,27 @@ export async function packageExtension(): Promise<Buffer> {
       reject(err);
     });
 
-    // Add manifest.json
+    // Add manifest.json (at root of browser-extension folder in ZIP)
     const manifestPath = path.join(extensionDir, 'manifest.json');
     if (fs.existsSync(manifestPath)) {
-      archive.file(manifestPath, { name: 'manifest.json' });
+      archive.file(manifestPath, { name: 'browser-extension/manifest.json' });
     }
 
     // Add directories (excluding node_modules, .git, etc.)
+    // Prefix all paths with 'browser-extension/' so they're in a folder when extracted
     const directoriesToInclude = ['src', 'public', 'icons', 'logo'];
     
     directoriesToInclude.forEach(dir => {
       const dirPath = path.join(extensionDir, dir);
       if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
-        archive.directory(dirPath, dir);
+        archive.directory(dirPath, `browser-extension/${dir}`);
       }
     });
 
     // Add README if exists
     const readmePath = path.join(extensionDir, 'README.md');
     if (fs.existsSync(readmePath)) {
-      archive.file(readmePath, { name: 'README.md' });
+      archive.file(readmePath, { name: 'browser-extension/README.md' });
     }
 
     // Finalize the archive

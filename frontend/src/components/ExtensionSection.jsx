@@ -45,7 +45,7 @@ function ExtensionSection() {
                     <strong>Download:</strong> Click "Download Extension (ZIP)" button above
                   </li>
                   <li>
-                    <strong>Extract:</strong> Extract the downloaded ZIP file to a folder on your computer
+                    <strong>Extract:</strong> Extract the downloaded ZIP file. You'll see a <code>browser-extension</code> folder inside.
                   </li>
                   <li>
                     <strong>Open Chrome:</strong> Go to <code>chrome://extensions/</code> (or <code>edge://extensions/</code> for Edge)
@@ -54,7 +54,7 @@ function ExtensionSection() {
                     <strong>Enable Developer Mode:</strong> Toggle "Developer mode" in the top-right corner
                   </li>
                   <li>
-                    <strong>Load Extension:</strong> Click "Load unpacked" and select the extracted folder
+                    <strong>Load Extension:</strong> Click "Load unpacked" and select the <code>browser-extension</code> folder (the one containing <code>manifest.json</code>)
                   </li>
                   <li>
                     <strong>Done!</strong> The TruthChain icon should appear in your browser toolbar. Start browsing to see verification badges!
