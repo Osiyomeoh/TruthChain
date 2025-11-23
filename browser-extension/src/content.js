@@ -641,31 +641,24 @@ function showHoverOverlay(element) {
     saveButton.className = 'truthchain-save-button';
     
     const saveIcon = document.createElement('img');
-    saveIcon.src = getLogoUrl('truthchain-icon-blue.png');
+    saveIcon.src = getLogoUrl('truthchain-icon-white.png');
     saveIcon.alt = 'TruthChain';
     saveIcon.className = 'truthchain-save-icon';
-    saveIcon.style.cssText = 'width: 16px; height: 16px; display: inline-block; object-fit: contain;';
+    saveIcon.style.cssText = 'width: 20px; height: 20px; display: inline-block; object-fit: contain;';
     saveIcon.onerror = function() {
-      console.error('Save button icon failed to load');
-      this.style.display = 'none';
-      const textSpan = saveButton.querySelector('.truthchain-save-text');
-      if (textSpan) textSpan.style.display = 'inline-block';
+      console.error('Save button icon failed to load, trying blue icon');
+      this.src = getLogoUrl('truthchain-icon-blue.png');
+      this.style.filter = 'brightness(0) invert(1)';
     };
     saveIcon.onload = function() {
       console.log('Save button icon loaded successfully');
     };
-    
-    const saveText = document.createElement('span');
-    saveText.className = 'truthchain-save-text';
-    saveText.textContent = 'Save';
-    saveText.style.display = 'inline-block';
     
     const arrow = document.createElement('span');
     arrow.className = 'truthchain-dropdown-arrow';
     arrow.textContent = '▼';
     
     saveButton.appendChild(saveIcon);
-    saveButton.appendChild(saveText);
     saveButton.appendChild(arrow);
     overlay.appendChild(saveButton);
     
