@@ -31,6 +31,10 @@ function getMediaUrlFromElement(element) {
   );
 }
 
+// Global flag to prevent multiple overlays from being created simultaneously
+let isCreatingOverlay = false;
+let currentActiveOverlayUrl = null;
+
 function attachMediaHoverListeners(element) {
   if (!element || element.dataset.truthchainHoverBound === 'true') {
     return;
@@ -45,8 +49,13 @@ function attachMediaHoverListeners(element) {
       clearTimeout(hoverTimeout);
     }
     hoverTimeout = setTimeout(() => {
+      // Check if we're already showing an overlay for this element
+      const mediaUrl = getMediaUrlFromElement(element);
+      if (mediaUrl && currentActiveOverlayUrl === mediaUrl) {
+        return; // Already showing overlay for this media
+      }
       showHoverOverlay(element);
-    }, 50);
+    }, 100); // Increased debounce time
   };
   const handleLeave = (e) => {
     e.stopPropagation();
@@ -57,21 +66,17 @@ function attachMediaHoverListeners(element) {
     hideHoverOverlay(element);
   };
 
-  // For videos, also listen on mouseover/mouseout as fallback
-  // and handle the video container if it exists
+  // Only use mouseenter/mouseleave to avoid duplicate events
   if (element.tagName === 'VIDEO') {
-    // Videos might have controls that interfere, so we need to be more careful
     element.addEventListener('mouseenter', handleEnter, true);
     element.addEventListener('mouseleave', handleLeave, true);
-    element.addEventListener('mouseover', handleEnter, true);
-    element.addEventListener('mouseout', handleLeave, true);
     
     // Also try to attach to parent container if video is wrapped
     const parent = element.parentElement;
     if (parent && !parent.dataset.truthchainHoverBound) {
       parent.dataset.truthchainHoverBound = 'true';
-      parent.addEventListener('mouseenter', () => showHoverOverlay(element), true);
-      parent.addEventListener('mouseleave', () => hideHoverOverlay(element), true);
+      parent.addEventListener('mouseenter', handleEnter, true);
+      parent.addEventListener('mouseleave', handleLeave, true);
     }
   } else {
     element.addEventListener('mouseenter', handleEnter);
@@ -600,6 +605,11 @@ function createTruthChainIcon() {
 }
 
 function showHoverOverlay(element) {
+  // Prevent multiple overlays from being created at the same time
+  if (isCreatingOverlay) {
+    return;
+  }
+
   const mediaUrl = getMediaUrlFromElement(element);
   if (!mediaUrl) {
     console.log('No media URL found for element:', element.tagName, element);
@@ -617,6 +627,19 @@ function showHoverOverlay(element) {
     return; // Don't show overlay if element is out of view
   }
 
+  // Hide any existing overlay first
+  if (currentActiveOverlayUrl && currentActiveOverlayUrl !== mediaUrl) {
+    const existingOverlayData = hoverOverlays.get(currentActiveOverlayUrl);
+    if (existingOverlayData && existingOverlayData.overlay) {
+      existingOverlayData.overlay.style.opacity = '0';
+      existingOverlayData.overlay.style.pointerEvents = 'none';
+      if (existingOverlayData.hideTimeout) {
+        clearTimeout(existingOverlayData.hideTimeout);
+        existingOverlayData.hideTimeout = null;
+      }
+    }
+  }
+
   // Check if overlay already exists for this media
   let overlayData = hoverOverlays.get(mediaUrl);
   if (overlayData && overlayData.overlay && overlayData.overlay.parentElement) {
@@ -628,15 +651,19 @@ function showHoverOverlay(element) {
       clearTimeout(overlayData.hideTimeout);
       overlayData.hideTimeout = null;
     }
+    currentActiveOverlayUrl = mediaUrl;
     return;
   }
+
+  // Set flag to prevent concurrent creation
+  isCreatingOverlay = true;
   
   if (!overlayData) {
     const overlay = document.createElement('div');
     overlay.className = 'truthchain-hover-overlay';
     overlay.tabIndex = 0;
     
-    // Add Pinterest-style "Save" button with icon
+    // Add TruthChain-themed button with logo and dropdown
     const saveButton = document.createElement('div');
     saveButton.className = 'truthchain-save-button';
     
@@ -644,7 +671,7 @@ function showHoverOverlay(element) {
     saveIcon.src = getLogoUrl('truthchain-icon-white.png');
     saveIcon.alt = 'TruthChain';
     saveIcon.className = 'truthchain-save-icon';
-    saveIcon.style.cssText = 'width: 20px; height: 20px; display: inline-block; object-fit: contain;';
+    saveIcon.style.cssText = 'width: 24px; height: 24px; display: inline-block; object-fit: contain;';
     saveIcon.onerror = function() {
       console.error('Save button icon failed to load, trying blue icon');
       this.src = getLogoUrl('truthchain-icon-blue.png');
@@ -753,6 +780,13 @@ function showHoverOverlay(element) {
     });
     
     document.body.appendChild(overlay);
+    
+    // Reset flag after overlay is created
+    isCreatingOverlay = false;
+    currentActiveOverlayUrl = mediaUrl;
+  } else {
+    // Reset flag if overlay already existed
+    isCreatingOverlay = false;
   }
 
   // Update dropdown based on current status
@@ -770,6 +804,7 @@ function showHoverOverlay(element) {
   overlayData.overlay.style.opacity = '1';
   overlayData.overlay.style.pointerEvents = 'auto';
   updateBadgePosition(overlayData.overlay, element, mediaUrl);
+  currentActiveOverlayUrl = mediaUrl;
 
   if (overlayData.hideTimeout) {
     clearTimeout(overlayData.hideTimeout);
@@ -786,6 +821,10 @@ function scheduleOverlayHide(mediaUrl, delay = 200) {
   overlayData.hideTimeout = setTimeout(() => {
     overlayData.overlay.style.opacity = '0';
     overlayData.overlay.style.pointerEvents = 'none';
+    // Clear active overlay URL when hiding
+    if (currentActiveOverlayUrl === mediaUrl) {
+      currentActiveOverlayUrl = null;
+    }
   }, delay);
 }
 
@@ -795,6 +834,10 @@ function hideHoverOverlay(elementOrUrl) {
     : getMediaUrlFromElement(elementOrUrl);
   if (!mediaUrl) return;
   scheduleOverlayHide(mediaUrl);
+  // Immediately clear active overlay URL
+  if (currentActiveOverlayUrl === mediaUrl) {
+    currentActiveOverlayUrl = null;
+  }
 }
 
 function updateOverlayStatus(mediaUrl) {
