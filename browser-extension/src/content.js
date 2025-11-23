@@ -39,6 +39,33 @@ function attachMediaHoverListeners(element) {
   if (!element || element.dataset.truthchainHoverBound === 'true') {
     return;
   }
+  
+  // Skip if element is inside a button or is a button itself
+  if (element.closest('button') || element.tagName === 'BUTTON') {
+    return;
+  }
+  
+  // Skip if element is inside an anchor tag that looks like a button
+  const parentLink = element.closest('a');
+  if (parentLink && (
+    parentLink.classList.contains('button') ||
+    parentLink.classList.contains('btn') ||
+    parentLink.getAttribute('role') === 'button'
+  )) {
+    return;
+  }
+  
+  // Only attach to actual img or video elements
+  if (element.tagName !== 'IMG' && element.tagName !== 'VIDEO') {
+    return;
+  }
+  
+  // Skip if element is too small (likely an icon)
+  const rect = element.getBoundingClientRect();
+  if (rect.width < 50 || rect.height < 50) {
+    return;
+  }
+  
   element.dataset.truthchainHoverBound = 'true';
 
   let hoverTimeout = null;
@@ -92,6 +119,27 @@ function initializeMediaHoverSystem() {
   console.log(`Initializing hover system: ${images.length} images, ${videos.length} videos`);
   
   mediaElements.forEach((element) => {
+    // Filter out images/videos that are buttons or inside buttons
+    if (element.closest('button') || element.tagName === 'BUTTON') {
+      return;
+    }
+    
+    // Filter out images/videos inside button-like links
+    const parentLink = element.closest('a');
+    if (parentLink && (
+      parentLink.classList.contains('button') ||
+      parentLink.classList.contains('btn') ||
+      parentLink.getAttribute('role') === 'button'
+    )) {
+      return;
+    }
+    
+    // Only attach to elements with valid media URLs
+    const mediaUrl = getMediaUrlFromElement(element);
+    if (!mediaUrl) {
+      return;
+    }
+    
     attachMediaHoverListeners(element);
   });
 
@@ -146,6 +194,11 @@ function initializeMediaHoverSystem() {
       mutation.addedNodes.forEach((node) => {
         if (node.nodeType !== 1) return;
         if (node.tagName === 'IMG' || node.tagName === 'VIDEO') {
+          // Skip if inside a button
+          if (node.closest('button') || node.tagName === 'BUTTON') {
+            return;
+          }
+          
           // Small delay for videos to ensure they're fully initialized
           if (node.tagName === 'VIDEO') {
             setTimeout(() => attachMediaHoverListeners(node), 100);
@@ -153,11 +206,20 @@ function initializeMediaHoverSystem() {
             attachMediaHoverListeners(node);
           }
         } else {
-          const nestedImages = node.querySelectorAll?.('img');
-          const nestedVideos = node.querySelectorAll?.('video');
-          nestedImages?.forEach(attachMediaHoverListeners);
+          // Only get images/videos that are not inside buttons
+          const nestedImages = node.querySelectorAll?.('img:not(button img)');
+          const nestedVideos = node.querySelectorAll?.('video:not(button video)');
+          
+          nestedImages?.forEach((img) => {
+            if (!img.closest('button')) {
+              attachMediaHoverListeners(img);
+            }
+          });
+          
           nestedVideos?.forEach((video) => {
-            setTimeout(() => attachMediaHoverListeners(video), 100);
+            if (!video.closest('button')) {
+              setTimeout(() => attachMediaHoverListeners(video), 100);
+            }
           });
         }
       });
@@ -607,6 +669,26 @@ function createTruthChainIcon() {
 function showHoverOverlay(element) {
   // Prevent multiple overlays from being created at the same time
   if (isCreatingOverlay) {
+    return;
+  }
+
+  // Only show overlay on actual img or video elements
+  if (element.tagName !== 'IMG' && element.tagName !== 'VIDEO') {
+    return;
+  }
+  
+  // Skip if element is inside a button or is a button itself
+  if (element.closest('button') || element.tagName === 'BUTTON') {
+    return;
+  }
+  
+  // Skip if element is inside an anchor tag that looks like a button
+  const parentLink = element.closest('a');
+  if (parentLink && (
+    parentLink.classList.contains('button') ||
+    parentLink.classList.contains('btn') ||
+    parentLink.getAttribute('role') === 'button'
+  )) {
     return;
   }
 
