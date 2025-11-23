@@ -26,8 +26,52 @@ function VerifySection() {
     }
   }
 
+  /**
+   * Normalize image by re-encoding it through canvas to strip metadata
+   * This ensures consistent hashing even if metadata differs
+   */
+  const normalizeImage = async (blob) => {
+    // Only normalize images, not videos
+    if (!blob.type.startsWith('image/')) {
+      return blob
+    }
+    
+    try {
+      // Create image from blob
+      const imageUrl = URL.createObjectURL(blob)
+      const img = await new Promise((resolve, reject) => {
+        const image = new Image()
+        image.onload = () => resolve(image)
+        image.onerror = reject
+        image.src = imageUrl
+      })
+      
+      // Create canvas and draw image (this strips metadata)
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      
+      // Convert back to blob (normalized, no metadata)
+      const normalizedBlob = await new Promise((resolve) => {
+        canvas.toBlob((normalized) => {
+          URL.revokeObjectURL(imageUrl)
+          resolve(normalized || blob) // Fallback to original if conversion fails
+        }, blob.type || 'image/png', 1.0) // Use original type, max quality
+      })
+      
+      return normalizedBlob || blob // Fallback to original if normalization fails
+    } catch (error) {
+      console.warn('Failed to normalize image, using original:', error)
+      return blob // Fallback to original blob if normalization fails
+    }
+  }
+
   const calculateHash = async (blob) => {
-    const arrayBuffer = await blob.arrayBuffer()
+    // Normalize image first to strip metadata and ensure consistent hashing
+    const normalizedBlob = await normalizeImage(blob)
+    const arrayBuffer = await normalizedBlob.arrayBuffer()
     const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
     const hashArray = Array.from(new Uint8Array(hashBuffer))
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')

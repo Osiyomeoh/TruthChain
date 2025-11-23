@@ -60,17 +60,17 @@ function attachMediaHoverListeners(element) {
     return;
   }
   
-  // Skip if element is too small (likely an icon)
-  const rect = element.getBoundingClientRect();
-  if (rect.width < 50 || rect.height < 50) {
-    return;
-  }
-  
+  // Remove size check - show on all images regardless of size
   element.dataset.truthchainHoverBound = 'true';
 
   let hoverTimeout = null;
   const handleEnter = (e) => {
-    e.stopPropagation();
+    // Don't stop propagation - let other handlers work too
+    // Only prevent default if needed
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+    
     // Debounce hover to prevent multiple overlays
     if (hoverTimeout) {
       clearTimeout(hoverTimeout);
@@ -82,36 +82,69 @@ function attachMediaHoverListeners(element) {
         return; // Already showing overlay for this media
       }
       showHoverOverlay(element);
-    }, 100); // Increased debounce time
+      // Also show badge if verification status exists
+      if (mediaUrl) {
+        const status = mediaStatus.get(mediaUrl);
+        if (status) {
+          // Show appropriate badge based on status
+          if (status.status === 'verified') {
+            showVerificationBadge(mediaUrl, status);
+          } else if (status.status === 'error') {
+            showErrorBadge(mediaUrl, status.message || 'Error');
+          } else if (status.status === 'unknown') {
+            showVerificationBadge(mediaUrl, status);
+          }
+        } else {
+          // If no status yet, verify in background (will show badge on next hover)
+          verifyMedia(mediaUrl, false).catch(() => {
+            // Silently fail - badge will show on next hover if status is available
+          });
+        }
+      }
+    }, 50); // Reduced debounce for faster response
   };
   const handleLeave = (e) => {
-    e.stopPropagation();
+    // Don't stop propagation - let other handlers work too
     if (hoverTimeout) {
       clearTimeout(hoverTimeout);
       hoverTimeout = null;
     }
     hideHoverOverlay(element);
+    // Also hide badge when leaving
+    const mediaUrl = getMediaUrlFromElement(element);
+    if (mediaUrl) {
+      removeBadgeForImage(mediaUrl);
+    }
   };
 
-  // Only use mouseenter/mouseleave to avoid duplicate events
-  if (element.tagName === 'VIDEO') {
-    element.addEventListener('mouseenter', handleEnter, true);
-    element.addEventListener('mouseleave', handleLeave, true);
-    
-    // Also try to attach to parent container if video is wrapped
-    const parent = element.parentElement;
-    if (parent && !parent.dataset.truthchainHoverBound) {
-      parent.dataset.truthchainHoverBound = 'true';
-      parent.addEventListener('mouseenter', handleEnter, true);
-      parent.addEventListener('mouseleave', handleLeave, true);
-    }
-  } else {
-    element.addEventListener('mouseenter', handleEnter);
-    element.addEventListener('mouseleave', handleLeave);
+  // Use capture phase for all elements to ensure we catch events before other handlers
+  // This is critical for sites that stop event propagation
+  element.addEventListener('mouseenter', handleEnter, true);
+  element.addEventListener('mouseleave', handleLeave, true);
+  
+  // Also attach to parent container for better hover detection
+  // This helps with sites that have complex DOM structures
+  const parent = element.parentElement;
+  if (parent && !parent.dataset.truthchainHoverBound) {
+    parent.dataset.truthchainHoverBound = 'true';
+    parent.addEventListener('mouseenter', (e) => {
+      // Only trigger if the event target is our image/video
+      if (e.target === element || element.contains(e.target)) {
+        handleEnter(e);
+      }
+    }, true);
+    parent.addEventListener('mouseleave', (e) => {
+      // Only trigger if we're leaving the parent and not entering the image
+      if (!element.contains(e.relatedTarget) && e.relatedTarget !== element) {
+        handleLeave(e);
+      }
+    }, true);
   }
 }
 
 function initializeMediaHoverSystem() {
+  // Use a more aggressive approach - attach to all images/videos first
+  // Then filter out problematic ones
   const images = document.querySelectorAll('img');
   const videos = document.querySelectorAll('video');
   const mediaElements = [...images, ...videos];
@@ -119,6 +152,11 @@ function initializeMediaHoverSystem() {
   console.log(`Initializing hover system: ${images.length} images, ${videos.length} videos`);
   
   mediaElements.forEach((element) => {
+    // Skip if already bound
+    if (element.dataset.truthchainHoverBound === 'true') {
+      return;
+    }
+    
     // Filter out images/videos that are buttons or inside buttons
     if (element.closest('button') || element.tagName === 'BUTTON') {
       return;
@@ -134,12 +172,12 @@ function initializeMediaHoverSystem() {
       return;
     }
     
-    // Only attach to elements with valid media URLs
+    // Try to get media URL - if it fails, still attach listeners
+    // (some images might load lazily)
     const mediaUrl = getMediaUrlFromElement(element);
-    if (!mediaUrl) {
-      return;
-    }
     
+    // Attach listeners even if URL is not available yet
+    // The URL might be available on hover
     attachMediaHoverListeners(element);
   });
 
@@ -240,12 +278,25 @@ function initializeMediaHoverSystem() {
 }
 
 function ensureRuntimeAvailable() {
-  if (!chrome.runtime || !chrome.runtime.sendMessage) {
-    const error = new Error('Extension context invalidated. Please reload the page.');
-    console.warn('Extension context invalidated. The extension may have been reloaded.');
+  try {
+    if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+      console.warn('Extension context invalidated. The extension may have been reloaded.');
+      return false;
+    }
+    // Test if runtime is actually available by trying to access getURL
+    if (chrome.runtime.getURL) {
+      try {
+        chrome.runtime.getURL('test');
+      } catch (e) {
+        console.warn('Extension context invalidated (getURL test failed).');
+        return false;
+      }
+    }
+    return true;
+  } catch (error) {
+    console.warn('Extension context invalidated:', error);
     return false;
   }
-  return true;
 }
 
 function sendMessageToBackground(message) {
@@ -254,59 +305,90 @@ function sendMessageToBackground(message) {
   }
   return new Promise((resolve, reject) => {
     try {
+      // Double-check runtime is available before sending
+      if (!chrome.runtime || !chrome.runtime.sendMessage) {
+        reject(new Error('Extension context invalidated. Please reload the page.'));
+        return;
+      }
+      
       chrome.runtime.sendMessage(message, (response) => {
+        // Check for runtime errors
         if (chrome.runtime.lastError) {
           const errorMsg = chrome.runtime.lastError.message;
           if (errorMsg.includes('Extension context invalidated') || 
-              errorMsg.includes('message port closed')) {
+              errorMsg.includes('message port closed') ||
+              errorMsg.includes('Receiving end does not exist')) {
             console.warn('Extension context invalidated. Please reload the page.');
+            reject(new Error('Extension context invalidated. Please reload the page.'));
+          } else {
+            reject(new Error(errorMsg));
           }
-          reject(new Error(errorMsg));
         } else {
           resolve(response);
         }
       });
     } catch (error) {
-      reject(error);
+      // Catch any synchronous errors (like when runtime is invalidated)
+      const errorMsg = error?.message || String(error);
+      if (errorMsg.includes('Extension context invalidated') || 
+          errorMsg.includes('Cannot access') ||
+          errorMsg.includes('getURL')) {
+        console.warn('Extension context invalidated during message send:', error);
+        reject(new Error('Extension context invalidated. Please reload the page.'));
+      } else {
+        reject(error);
+      }
     }
   });
 }
 
 // Ensure auto verification stays disabled in storage
-chrome.storage.local.set({ autoVerifyEnabled: false });
+try {
+  if (chrome && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.set({ autoVerifyEnabled: false });
+  }
+} catch (error) {
+  console.warn('Could not set storage (extension context may be invalidated):', error);
+}
 
 // Listen for verify and register commands
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('Content script received message:', request);
-    if (request.action === 'verify-media') {
-      console.log('Content script received verify request for:', request.url);
-      verifyMedia(request.url)
-        .then(() => {
-          console.log('verifyMedia completed successfully');
-          sendResponse({ success: true });
-        })
-        .catch(error => {
-          console.error('Error in verifyMedia:', error);
-          showErrorBadge(request.url, error.message);
-          sendResponse({ success: false, error: error.message });
-        });
-      return true; // Indicates we will respond asynchronously
-    } else if (request.action === 'register-media') {
-      console.log('Content script received register request for:', request.url);
-      registerMedia(request.url)
-        .then(() => {
-          console.log('registerMedia completed successfully');
-          sendResponse({ success: true });
-        })
-        .catch(error => {
-          console.error('Error in registerMedia:', error);
-          showErrorBadge(request.url, error.message);
-          sendResponse({ success: false, error: error.message });
-        });
-      return true; // Indicates we will respond asynchronously
-    }
-    return false;
-  });
+try {
+  if (chrome && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      console.log('Content script received message:', request);
+      if (request.action === 'verify-media') {
+        console.log('Content script received verify request for:', request.url);
+        verifyMedia(request.url)
+          .then(() => {
+            console.log('verifyMedia completed successfully');
+            sendResponse({ success: true });
+          })
+          .catch(error => {
+            console.error('Error in verifyMedia:', error);
+            showErrorBadge(request.url, error.message);
+            sendResponse({ success: false, error: error.message });
+          });
+        return true; // Indicates we will respond asynchronously
+      } else if (request.action === 'register-media') {
+        console.log('Content script received register request for:', request.url);
+        registerMedia(request.url)
+          .then(() => {
+            console.log('registerMedia completed successfully');
+            sendResponse({ success: true });
+          })
+          .catch(error => {
+            console.error('Error in registerMedia:', error);
+            showErrorBadge(request.url, error.message);
+            sendResponse({ success: false, error: error.message });
+          });
+        return true; // Indicates we will respond asynchronously
+      }
+      return false;
+    });
+  }
+} catch (error) {
+  console.warn('Could not set up message listener (extension context may be invalidated):', error);
+}
   
   async function verifyMedia(mediaUrl, showBadge = true) {
     // Prevent duplicate verifications for the same URL
@@ -318,9 +400,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     try {
       verifyingUrls.add(mediaUrl);
       
-      if (showBadge) {
-        showLoadingBadge(mediaUrl, 'Verifying...');
-      }
+      // Loading badges are now hover-based, not shown immediately
   
       // Try to fetch the media - handle CORS issues
       let response;
@@ -363,9 +443,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // Check cache first
       if (verifiedHashes.has(hash)) {
         console.log('Hash found in cache, already verified');
-        if (showBadge) {
-          showVerificationBadge(mediaUrl, { status: 'verified' });
-        }
+        // Don't show badge immediately - it will show on hover
         verifyingUrls.delete(mediaUrl);
         return { status: 'verified', hash };
       }
@@ -386,9 +464,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       updateOverlayStatus(mediaUrl);
       updateSidebarWithResult(mediaUrl, { ...result, hash });
       
-      if (showBadge) {
-      showVerificationBadge(mediaUrl, result);
-      }
+      // Don't show badge immediately - it will show on hover
+      // Badges are now hover-based, not permanent
       
       if (isAuto) {
         processedAutoHashes.add(hash);
@@ -397,14 +474,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return result;
   
     } catch (error) {
-      console.error('Verification error:', error);
-      mediaStatus.set(mediaUrl, { status: 'error', message: error instanceof Error ? error.message : String(error) });
-      updateOverlayStatus(mediaUrl);
-      updateSidebarWithResult(mediaUrl, error instanceof Error ? error : new Error(String(error)));
-      if (showBadge) {
-        showErrorBadge(mediaUrl, error instanceof Error ? error.message : String(error));
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const isContextInvalidated = errorMsg.includes('Extension context invalidated') || 
+                                    errorMsg.includes('message port closed') ||
+                                    errorMsg.includes('Receiving end does not exist');
+      
+      if (isContextInvalidated) {
+        console.warn('Extension context invalidated during verification. Please reload the page.');
+        mediaStatus.set(mediaUrl, { 
+          status: 'error', 
+          message: 'Extension context invalidated. Please reload the page to continue using TruthChain.' 
+        });
+      } else {
+        console.error('Verification error:', error);
+        mediaStatus.set(mediaUrl, { status: 'error', message: errorMsg });
       }
-      throw error;
+      
+      updateOverlayStatus(mediaUrl);
+      updateSidebarWithResult(mediaUrl, error instanceof Error ? error : new Error(errorMsg));
+      // Don't show error badge immediately - it will show on hover if needed
+      // Badges are now hover-based, not permanent
+      
+      // Don't throw context invalidation errors - they're expected when extension reloads
+      if (!isContextInvalidated) {
+        throw error;
+      }
     } finally {
       verifyingUrls.delete(mediaUrl);
     }
@@ -472,12 +566,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       verifiedMediaUrls.add(mediaUrl);
       
       try {
-        // Verify silently (no loading badge for auto-verify)
+        // Verify silently (badges will show on hover)
         const result = await verifyMedia(mediaUrl, false);
-        // Show badge only if verified (not for unknown/errors in auto-mode)
-        if (result && result.status === 'verified') {
-          showVerificationBadge(mediaUrl, result);
-        }
+        // Don't show badge immediately - badges are hover-based
       } catch (error) {
         // Silently fail for auto-verification
         const message = error instanceof Error ? error.message : String(error);
@@ -498,8 +589,52 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
   }
   
+  /**
+   * Normalize image by re-encoding it through canvas to strip metadata
+   * This ensures consistent hashing even if metadata differs
+   */
+  async function normalizeImage(blob) {
+    // Only normalize images, not videos
+    if (!blob.type.startsWith('image/')) {
+      return blob;
+    }
+    
+    try {
+      // Create image from blob
+      const imageUrl = URL.createObjectURL(blob);
+      const img = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = imageUrl;
+      });
+      
+      // Create canvas and draw image (this strips metadata)
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      
+      // Convert back to blob (normalized, no metadata)
+      const normalizedBlob = await new Promise((resolve) => {
+        canvas.toBlob((normalized) => {
+          URL.revokeObjectURL(imageUrl);
+          resolve(normalized || blob); // Fallback to original if conversion fails
+        }, blob.type || 'image/png', 1.0); // Use original type, max quality
+      });
+      
+      return normalizedBlob || blob; // Fallback to original if normalization fails
+    } catch (error) {
+      console.warn('Failed to normalize image, using original:', error);
+      return blob; // Fallback to original blob if normalization fails
+    }
+  }
+  
   async function calculateHash(blob) {
-    const arrayBuffer = await blob.arrayBuffer();
+    // Normalize image first to strip metadata and ensure consistent hashing
+    const normalizedBlob = await normalizeImage(blob);
+    const arrayBuffer = await normalizedBlob.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -1268,9 +1403,19 @@ function updateSidebarWithResult(mediaUrl, result) {
   
   // Helper function to get logo URL
   function getLogoUrl(logoName = 'truthchain-icon-blue.png') {
-    const url = chrome.runtime.getURL(`icons/${logoName}`);
-    console.log('Getting logo URL:', url);
-    return url;
+    try {
+      if (!ensureRuntimeAvailable()) {
+        // Return a data URI placeholder if extension context is invalid
+        return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnptLTIgMTVsLTUtNSAxLjQxLTEuNDFMMTAgMTQuMTdsNy41OS03LjU5TDE5IDhsLTkgOXoiIGZpbGw9IiMxMEI5ODEiLz48L3N2Zz4=';
+      }
+      const url = chrome.runtime.getURL(`icons/${logoName}`);
+      console.log('Getting logo URL:', url);
+      return url;
+    } catch (error) {
+      console.warn('Extension context invalidated, using fallback logo:', error);
+      // Return a data URI placeholder
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnptLTIgMTVsLTUtNSAxLjQxLTEuNDFMMTAgMTQuMTdsNy41OS03LjU5TDE5IDhsLTkgOXoiIGZpbGw9IiMxMEI5ODEiLz48L3N2Zz4=';
+    }
   }
   
   // Alternative: Load image as blob (more reliable in some cases)
@@ -1405,20 +1550,22 @@ function updateSidebarWithResult(mediaUrl, result) {
     
     // Use fixed positioning with responsive updates (will switch to absolute in fullscreen)
     badge.style.cssText = `
-      position: fixed;
+      position: fixed !important;
       background: ${backgroundColor} !important;
       color: white !important;
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: bold;
-      z-index: 999999;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      pointer-events: auto;
-      white-space: nowrap;
-      display: flex;
-      align-items: center;
-      border: none;
+      padding: 8px 12px !important;
+      border-radius: 6px !important;
+      font-size: 13px !important;
+      font-weight: bold !important;
+      z-index: 999999 !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+      pointer-events: auto !important;
+      white-space: nowrap !important;
+      display: flex !important;
+      align-items: center !important;
+      border: none !important;
+      visibility: visible !important;
+      opacity: 1 !important;
     `;
   
     // Set initial position (will handle fullscreen automatically)
@@ -1456,9 +1603,7 @@ async function registerMedia(mediaUrl, options = {}) {
     
     try {
     verifyingUrls.add(mediaUrl);
-    if (showBadge) {
-      showLoadingBadge(mediaUrl, 'Registering...');
-    }
+    // Loading badges are now hover-based, not shown immediately
   
       // Try to fetch the media - handle CORS issues
       let response;
@@ -1505,9 +1650,8 @@ async function registerMedia(mediaUrl, options = {}) {
       });
   
     if (result.success) {
-      if (showBadge) {
-        showRegistrationBadge(mediaUrl, result);
-      }
+      // Store status - badge will show on hover
+      mediaStatus.set(mediaUrl, { status: 'verified', ...result });
       // Mark as verified so it won't be auto-verified again
       verifiedMediaUrls.add(mediaUrl);
       // Allow auto-verification to run again to show updated state
@@ -1516,24 +1660,22 @@ async function registerMedia(mediaUrl, options = {}) {
       
       // Return the result so sidebar can display it
       return result;
-    } else if (showBadge) {
-      showErrorBadge(mediaUrl, result.error || 'Registration failed');
+    } else {
+      // Store error status - badge will show on hover if needed
+      mediaStatus.set(mediaUrl, { status: 'error', message: result.error || 'Registration failed' });
     }
     
     return result;
       
     } catch (error) {
       console.error('Registration error:', error);
-    if (showBadge) {
-      showErrorBadge(mediaUrl, error.message);
-    } else {
+      // Store error status - badge will show on hover if needed
       mediaStatus.set(mediaUrl, {
         status: 'error',
         message: error.message
       });
       updateOverlayStatus(mediaUrl);
       updateSidebarWithResult(mediaUrl, error);
-    }
     } finally {
       verifyingUrls.delete(mediaUrl);
     }
@@ -1576,17 +1718,12 @@ async function registerMedia(mediaUrl, options = {}) {
 
     const elementRect = element.getBoundingClientRect();
     
-    // Check if element is visible (more strict check for hover overlays)
+    // Check if element is visible - be very lenient for large images
     const isHoverOverlay = badge.classList.contains('truthchain-hover-overlay');
-    const viewportMargin = isHoverOverlay ? 100 : 1000; // Stricter for hover overlays
     
-    if (elementRect.width === 0 || elementRect.height === 0 || 
-        elementRect.top < -viewportMargin || 
-        elementRect.left < -viewportMargin ||
-        elementRect.bottom > window.innerHeight + viewportMargin ||
-        elementRect.right > window.innerWidth + viewportMargin) {
+    // Basic check: element must have dimensions
+    if (elementRect.width === 0 || elementRect.height === 0) {
       badge.style.display = 'none';
-      // For hover overlays, also hide opacity
       if (isHoverOverlay) {
         badge.style.opacity = '0';
         badge.style.pointerEvents = 'none';
@@ -1594,7 +1731,28 @@ async function registerMedia(mediaUrl, options = {}) {
       return;
     }
     
-    badge.style.display = 'block';
+    // For large images that cover most of the screen, always show badge
+    // Check if image intersects with viewport at all (very lenient)
+    const intersectsViewport = 
+      elementRect.right > 0 && 
+      elementRect.left < window.innerWidth &&
+      elementRect.bottom > 0 && 
+      elementRect.top < window.innerHeight;
+    
+    // If image doesn't intersect viewport at all, hide badge
+    if (!intersectsViewport) {
+      badge.style.display = 'none';
+      if (isHoverOverlay) {
+        badge.style.opacity = '0';
+        badge.style.pointerEvents = 'none';
+      }
+      return;
+    }
+    
+    // Ensure badge is visible
+    badge.style.display = 'flex'; // Keep flex for proper layout
+    badge.style.visibility = 'visible';
+    badge.style.opacity = '1';
     badge.style.zIndex = '999999';
     badge.style.position = 'fixed';
     
@@ -1609,7 +1767,7 @@ async function registerMedia(mediaUrl, options = {}) {
       badgeHeight = isHoverOverlay ? 28 : 35;
       // Force layout to get actual dimensions
       badge.style.visibility = 'hidden';
-      badge.style.display = 'block';
+      badge.style.display = 'flex';
       const measuredRect = badge.getBoundingClientRect();
       if (measuredRect.width > 0) badgeWidth = measuredRect.width;
       if (measuredRect.height > 0) badgeHeight = measuredRect.height;
@@ -1619,49 +1777,63 @@ async function registerMedia(mediaUrl, options = {}) {
     // Padding from image edges (Pinterest-style: 12px from top, 12px from right)
     const padding = isHoverOverlay ? 12 : 8;
     
-    // Calculate position within image bounds (top-right corner for Pinterest-style)
-    // Start with preferred position (top-right of image)
-    let top = elementRect.top + padding;
-    let left = elementRect.right - badgeWidth - padding;
+    // Calculate visible intersection of image and viewport
+    const visibleTop = Math.max(0, elementRect.top);
+    const visibleRight = Math.min(window.innerWidth, elementRect.right);
+    const visibleBottom = Math.min(window.innerHeight, elementRect.bottom);
+    const visibleLeft = Math.max(0, elementRect.left);
     
-    // Constrain to image bounds
-    const minTop = elementRect.top + padding;
-    const maxTop = elementRect.bottom - badgeHeight - padding;
-    const minLeft = elementRect.left + padding;
-    const maxLeft = elementRect.right - badgeWidth - padding;
+    // For large images that cover most of the screen, position badge in viewport top-right
+    // For smaller images, position relative to image top-right
+    // Always ensure badge is visible in viewport
     
-    // Clamp to image boundaries
-    top = Math.max(minTop, Math.min(top, maxTop));
-    left = Math.max(minLeft, Math.min(left, maxLeft));
+    // Check if image is very large (covers significant portion of viewport)
+    const imageCoversLargeArea = 
+      (elementRect.width > window.innerWidth * 0.8) || 
+      (elementRect.height > window.innerHeight * 0.8);
     
-    // Also ensure it doesn't overflow viewport (secondary constraint)
+    let top, left;
+    
+    if (imageCoversLargeArea) {
+      // For large images: position in viewport top-right (always visible)
+      top = padding;
+      left = window.innerWidth - badgeWidth - padding;
+    } else {
+      // For normal images: position in visible image area top-right
+      top = visibleTop + padding;
+      left = visibleRight - badgeWidth - padding;
+      
+      // Ensure badge stays within visible image bounds
+      if (top + badgeHeight > visibleBottom) {
+        top = Math.max(padding, visibleBottom - badgeHeight - padding);
+      }
+      if (left < visibleLeft) {
+        left = visibleLeft + padding;
+      }
+    }
+    
+    // Always ensure badge is within viewport bounds (critical)
     const viewportMaxTop = window.innerHeight - badgeHeight - padding;
     const viewportMaxLeft = window.innerWidth - badgeWidth - padding;
     top = Math.max(padding, Math.min(top, viewportMaxTop));
     left = Math.max(padding, Math.min(left, viewportMaxLeft));
     
-    // Final check: if badge would overflow image, adjust position
-    if (top + badgeHeight > elementRect.bottom) {
-      top = elementRect.bottom - badgeHeight - padding;
-    }
-    if (left + badgeWidth > elementRect.right) {
-      left = elementRect.right - badgeWidth - padding;
-    }
-    if (top < elementRect.top) {
-      top = elementRect.top + padding;
-    }
-    if (left < elementRect.left) {
-      left = elementRect.left + padding;
-    }
+    // Final visibility check - ensure badge is actually visible
+    badge.style.top = `${top}px`;
+    badge.style.left = `${left}px`;
+    badge.style.display = 'flex';
+    badge.style.visibility = 'visible';
+    badge.style.opacity = '1';
+    badge.style.pointerEvents = 'auto';
 
-    // Only update position if it actually changed to avoid unnecessary repaints
-    const currentTop = parseInt(badge.style.top) || 0;
-    const currentLeft = parseInt(badge.style.left) || 0;
-    if (Math.abs(currentTop - top) > 1 || Math.abs(currentLeft - left) > 1) {
-      badge.style.top = `${top}px`;
-      badge.style.left = `${left}px`;
-      badge.style.right = 'auto';
-    }
+    // Always set position to ensure badge is visible
+    badge.style.top = `${top}px`;
+    badge.style.left = `${left}px`;
+    badge.style.right = 'auto';
+    badge.style.bottom = 'auto';
+    
+    // Force a reflow to ensure the badge is rendered
+    void badge.offsetHeight;
   }
 
   function attachResponsiveBadgeListeners(badge, element, mediaUrl) {
