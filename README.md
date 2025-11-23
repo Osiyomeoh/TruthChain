@@ -7,7 +7,12 @@
 
 ## 🏆 Hackathon Track: Provably Authentic (Truth Engine + Trust Oracle)
 
-TruthChain is a browser extension that **instantly verifies the authenticity of any image or video online** by leveraging:
+TruthChain is a **decentralized media authenticity platform** that **instantly verifies the authenticity of any image or video** through:
+
+**🌐 Web Platform**: Full-featured web application for media registration and verification  
+**🔌 Browser Extension**: Seamless verification on any website as you browse
+
+Both interfaces leverage:
 - **🦭 Walrus**: Decentralized blob storage for media metadata and proofs
 - **🔒 Seal**: Cryptographic integrity proofs for data verification
 - **🔍 Nautilus**: Fast indexing and search for attestations
@@ -15,19 +20,36 @@ TruthChain is a browser extension that **instantly verifies the authenticity of 
 
 ## 🎯 Problem Statement
 
-In an era of AI-generated content and deepfakes, users can't trust what they see online. Traditional verification methods are centralized, expensive, and slow. TruthChain provides **instant, decentralized, and provable authenticity verification** for any media on the web.
+In an era of AI-generated content and deepfakes, users can't trust what they see online. Traditional verification methods are centralized, expensive, and slow. TruthChain is a **complete platform** that provides **instant, decentralized, and provable authenticity verification** for any media through:
+
+- **🌐 Web Application**: Full-featured interface for media registration and verification
+- **🔌 Browser Extension**: Seamless verification while browsing any website
+
+Both interfaces work together to provide comprehensive media authenticity verification across the entire web.
 
 ## ✨ Key Features
 
-### 🔍 **Auto-Verification**
-- Automatically scans and verifies images/videos as you browse
-- Works on social media feeds, news sites, and any website
-- Non-intrusive badges show verification status instantly
+### 🌐 **Web Platform**
+- **Media Registration**: Upload and register images/videos with detailed metadata
+- **Media Verification**: Upload files to verify authenticity
+- **Wallet Integration**: Connect Sui wallet for direct blockchain transactions
+- **Detailed Results**: View attestation details, creator info, timestamps, and transaction hashes
+- **AI Detection**: Automatic detection of AI-generated content
+- **Terms & Conditions**: Complete legal framework for platform usage
+
+### 🔌 **Browser Extension**
+- **Auto-Verification**: Automatically scans and verifies images/videos as you browse
+- **Works Everywhere**: Functions on social media feeds, news sites, and any website
+- **Non-Intrusive Badges**: Visual badges show verification status instantly
+- **Hover Detection**: Badges appear when hovering over images/videos
+- **Right-Click Menu**: Quick access to verify or register media
+- **Sidebar Details**: Click badge to view detailed verification information
 
 ### 🖼️ **Multi-Format Support**
-- Images (JPG, PNG, WebP, etc.)
+- Images (JPG, PNG, WebP, AVIF, etc.)
 - Videos (MP4, WebM, etc.)
 - Content-based hashing (not URL-based)
+- Image normalization ensures consistent hashing across formats
 
 ### 🔐 **Decentralized Architecture**
 - **Walrus**: Stores media metadata and Seal proofs as blobs
@@ -42,47 +64,63 @@ In an era of AI-generated content and deepfakes, users can't trust what they see
 - Analytics dashboard capabilities
 
 ### 🚀 **Zero-Friction UX**
-- Right-click "Verify with TruthChain" on any media
-- Automatic background verification
-- Visual badges with verification status
-- Works in fullscreen and responsive to scroll
+- **Extension**: Right-click "Verify with TruthChain" on any media
+- **Extension**: Automatic background verification with hover badges
+- **Frontend**: Simple file upload interface
+- **Both**: Visual feedback with verification status
+- **Extension**: Works in fullscreen and responsive to scroll
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐
-│  Browser        │
-│  Extension      │
-│  (Content Hash) │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Backend API    │
-│  (Express)      │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌────────┐ ┌──────────┐
-│ Walrus │ │   Sui    │
-│ (Blob) │ │(On-chain)│
-└────────┘ └──────────┘
-    │           │
-    ▼           ▼
-┌────────┐ ┌──────────┐
-│  Seal  │ │ Nautilus │
-│(Proofs)│ │ (Index)  │
-└────────┘ └──────────┘
+┌─────────────────────┐     ┌─────────────────────┐
+│   Web Frontend      │     │ Browser Extension   │
+│   (React + Vite)    │     │ (Manifest V3)       │
+│   - Registration    │     │ - Auto-Verification │
+│   - Verification    │     │ - Hover Badges      │
+│   - Wallet Connect  │     │ - Right-Click Menu  │
+└──────────┬──────────┘     └──────────┬──────────┘
+           │                           │
+           └───────────┬───────────────┘
+                       │
+                       ▼
+            ┌───────────────────┐
+            │   Backend API     │
+            │   (Express + TS)  │
+            │   - Validation    │
+            │   - Processing    │
+            └──────────┬────────┘
+                       │
+              ┌────────┴────────┐
+              │                │
+              ▼                ▼
+      ┌─────────────┐  ┌──────────────┐
+      │   Walrus    │  │     Sui      │
+      │  (Blob      │  │  (On-chain   │
+      │  Storage)   │  │  Registry)   │
+      └──────┬──────┘  └──────┬───────┘
+             │                │
+             ▼                ▼
+      ┌─────────────┐  ┌──────────────┐
+      │    Seal     │  │  Nautilus   │
+      │  (Merkle    │  │  (Indexing  │
+      │   Proofs)   │  │   & Search) │
+      └─────────────┘  └──────────────┘
 ```
 
 ### Technology Stack
 
-**Frontend:**
+**Web Frontend:**
+- React + Vite for fast development
+- @mysten/dapp-kit for Sui wallet integration
+- Component-based architecture
+- File upload and verification interface
+
+**Browser Extension:**
 - Chrome Extension (Manifest V3)
 - Content Scripts for media detection
 - Background Service Worker for API communication
+- Hover-based badge system
 
 **Backend:**
 - Node.js + Express
@@ -183,17 +221,18 @@ In an era of AI-generated content and deepfakes, users can't trust what they see
 
 ---
 
-### 5. **React + Vite** ⚛️
+### 5. **React + Vite** ⚛️ (Frontend Only)
 
 **What it does:**
 - React provides component-based UI framework
 - Vite provides fast development server and optimized builds
 
-**How it's used:**
+**How it's used in Frontend:**
 - **Component Architecture**: Modular components (RegisterSection, VerifySection, WalletButton, etc.)
 - **State Management**: React hooks (`useState`, `useEffect`) for component state
 - **Fast Development**: Vite's HMR (Hot Module Replacement) for instant updates
 - **Optimized Builds**: Vite bundles and optimizes for production
+- **User Interface**: Provides web-based interface for media registration and verification
 
 **Implementation:**
 - `frontend/src/components/` - All React components
@@ -201,15 +240,17 @@ In an era of AI-generated content and deepfakes, users can't trust what they see
 - `frontend/vite.config.js` - Vite configuration
 - React Query for API data fetching and caching
 
+**Note:** Extension uses vanilla JavaScript, not React
+
 ---
 
-### 6. **@mysten/dapp-kit** 🔐
+### 6. **@mysten/dapp-kit** 🔐 (Frontend Only)
 
 **What it does:**
 - Sui wallet integration library for React
 - Handles wallet connection, transaction signing, and wallet state
 
-**How it's used:**
+**How it's used in Frontend:**
 - **Wallet Connection**: Users connect Sui wallets (Sui Wallet, Ethos, etc.)
 - **Transaction Signing**: Users sign blockchain transactions directly from frontend
 - **Wallet-based Registration**: Alternative to backend-initiated transactions
@@ -220,6 +261,8 @@ In an era of AI-generated content and deepfakes, users can't trust what they see
 - `frontend/src/components/WalletProvider.jsx` - Wallet context provider
 - `frontend/src/utils/walletRegistration.js` - Transaction building for wallet signing
 - Enables user-controlled, non-custodial registrations
+
+**Note:** Extension uses backend API for all operations, not direct wallet integration
 
 ---
 
@@ -262,19 +305,20 @@ In an era of AI-generated content and deepfakes, users can't trust what they see
 
 ---
 
-### 9. **Chrome Extension API** 🌐
+### 9. **Chrome Extension API** 🌐 (Extension Only)
 
 **What it does:**
 - Browser extension platform for Chrome/Edge
 - Allows injection of scripts into web pages
 - Provides APIs for storage, context menus, messaging
 
-**How it's used:**
+**How it's used in Extension:**
 - **Content Scripts**: Injected into web pages to detect media elements
 - **Background Service Worker**: Handles API calls and message passing
 - **Context Menus**: Right-click menu for "Verify with TruthChain"
 - **Storage API**: Caches verification results locally
 - **Hover Detection**: Shows badges when user hovers over images/videos
+- **Cross-site Access**: Works on any website with images/videos
 
 **Implementation:**
 - `browser-extension/manifest.json` - Extension configuration (Manifest V3)
@@ -282,44 +326,65 @@ In an era of AI-generated content and deepfakes, users can't trust what they see
 - `browser-extension/src/background.js` - Service worker (API communication)
 - Works on any website with images/videos
 
+**Note:** Frontend is a web application, not a browser extension
+
 ---
 
-### 10. **Canvas API** 🎨
+### 10. **Canvas API** 🎨 (Extension + Frontend)
 
 **What it does:**
 - Browser API for image manipulation and rendering
 - Allows programmatic image processing
 
-**How it's used:**
+**How it's used in Extension:**
 - **Image Normalization**: Re-encodes images to strip metadata (EXIF, etc.)
 - **Format Conversion**: Converts all images to PNG format for consistent hashing
 - **Metadata Removal**: Ensures same image content always produces same hash
 - **Transparency Handling**: Fills transparent areas with white background
+- **Consistent Hashing**: Same image produces same hash regardless of original format
+
+**How it's used in Frontend:**
+- **File Upload Processing**: Normalizes uploaded images before hashing
+- **Format Standardization**: Converts all images to PNG for hash consistency
+- **Metadata Stripping**: Removes EXIF and other metadata that could affect hash
 
 **Implementation:**
-- `normalizeImage()` function in `browser-extension/src/content.js`
-- Same function in `frontend/src/components/RegisterSection.jsx` and `VerifySection.jsx`
-- Loads image → Draws to Canvas → Exports as PNG blob → Strips all metadata
+- **Extension**: `normalizeImage()` function in `browser-extension/src/content.js`
+- **Frontend**: Same `normalizeImage()` function in `frontend/src/components/RegisterSection.jsx` and `VerifySection.jsx`
+- Process: Loads image → Draws to Canvas → Exports as PNG blob → Strips all metadata
+- Ensures extension and frontend produce identical hashes for the same image
 
 ---
 
-### 11. **SHA-256** 🔐
+### 11. **SHA-256** 🔐 (Extension + Frontend + Backend)
 
 **What it does:**
 - Cryptographic hash function
 - Generates unique 256-bit hash for any data
 
-**How it's used:**
-- **Media Hashing**: Generates unique hash for each image/video
+**How it's used in Extension:**
+- **Media Hashing**: Generates unique hash for each image/video on web pages
 - **Content-based Verification**: Hash based on image content, not URL
-- **Consistency**: Same image always produces same hash (after normalization)
-- **Security**: One-way function - cannot reverse hash to get original image
+- **Verification Requests**: Sends hash to backend for verification
+- **Registration Requests**: Sends hash to backend for registration
+
+**How it's used in Frontend:**
+- **File Hashing**: Generates hash for uploaded images/videos
+- **Verification**: Sends hash to backend to check if media is registered
+- **Registration**: Sends hash to backend to register new media
+
+**How it's used in Backend:**
+- **Hash Validation**: Validates hash format (64 characters)
+- **Blockchain Queries**: Uses hash to query Sui blockchain for attestations
+- **Seal Proofs**: Hash is included in Seal Merkle tree proofs
 
 **Implementation:**
-- Browser: `crypto.subtle.digest('SHA-256', arrayBuffer)`
-- Node.js: `crypto.createHash('sha256')`
+- **Extension**: `crypto.subtle.digest('SHA-256', arrayBuffer)` in `browser-extension/src/content.js`
+- **Frontend**: Same API in `frontend/src/components/RegisterSection.jsx` and `VerifySection.jsx`
+- **Backend**: `crypto.createHash('sha256')` in Node.js
 - Used after image normalization to ensure consistent hashing
 - 64-character hexadecimal string output
+- Same image always produces same hash across extension, frontend, and backend
 
 ---
 
@@ -342,20 +407,64 @@ In an era of AI-generated content and deepfakes, users can't trust what they see
 ## 🔄 Technology Integration Flow
 
 ### Registration Process:
-1. **Extension/Frontend**: Canvas API normalizes image → SHA-256 hash calculated
-2. **Backend**: Zod validates request → Seal generates Merkle proof
-3. **Backend**: Walrus stores metadata + proof as blob → Returns blob ID
-4. **Backend**: Sui SDK creates on-chain transaction → Stores attestation
-5. **Backend**: Nautilus indexes attestation for search
-6. **Response**: Returns attestation ID, transaction hash, blob ID
+
+**Via Extension:**
+1. User hovers over image → Extension detects media
+2. Extension: Canvas API normalizes image → SHA-256 hash calculated
+3. Extension: Sends hash + metadata to backend API
+4. Backend: Zod validates request → Seal generates Merkle proof
+5. Backend: Walrus stores metadata + proof as blob → Returns blob ID
+6. Backend: Sui SDK creates on-chain transaction → Stores attestation
+7. Backend: Nautilus indexes attestation for search
+8. Response: Returns attestation ID, transaction hash, blob ID to extension
+
+**Via Frontend:**
+1. User uploads file → Frontend processes file
+2. Frontend: Canvas API normalizes image → SHA-256 hash calculated
+3. Frontend: User selects registration method (Backend or Wallet)
+4. If Backend: Sends hash + metadata to backend API (same as extension flow)
+5. If Wallet: User connects wallet → Frontend builds transaction → User signs → Backend indexes
+6. Backend: Zod validates → Seal generates proof → Walrus upload → Sui transaction → Nautilus index
+7. Response: Returns attestation ID, transaction hash, blob ID to frontend
 
 ### Verification Process:
-1. **Extension**: Detects media → Normalizes → Calculates hash
-2. **Backend**: Sui SDK queries blockchain for attestation by hash
-3. **Backend**: Retrieves blob from Walrus using blob ID
-4. **Backend**: Verifies Seal proof integrity
-5. **Backend**: Updates Nautilus verification count
-6. **Response**: Returns verification status and attestation details
+
+**Via Extension:**
+1. Extension: Detects media on page → Normalizes → Calculates hash
+2. Extension: Sends hash to backend API
+3. Backend: Sui SDK queries blockchain for attestation by hash
+4. Backend: Retrieves blob from Walrus using blob ID
+5. Backend: Verifies Seal proof integrity
+6. Backend: Updates Nautilus verification count
+7. Response: Returns verification status and attestation details to extension
+8. Extension: Displays badge with verification status
+
+**Via Frontend:**
+1. User uploads file → Frontend processes file
+2. Frontend: Canvas API normalizes image → SHA-256 hash calculated
+3. Frontend: Sends hash to backend API
+4. Backend: Sui SDK queries blockchain for attestation by hash
+5. Backend: Retrieves blob from Walrus using blob ID
+6. Backend: Verifies Seal proof integrity
+7. Backend: Updates Nautilus verification count
+8. Response: Returns verification status and attestation details to frontend
+9. Frontend: Displays verification result with attestation details
+
+### Key Differences:
+
+**Extension:**
+- Works on any website automatically
+- Detects media on page load
+- Shows badges on hover
+- Uses backend API for all operations
+- No wallet integration
+
+**Frontend:**
+- Web application interface
+- User uploads files manually
+- Supports wallet-based registration
+- More detailed UI with metadata display
+- Can connect Sui wallet for direct transactions
 
 This architecture provides **decentralization** (Sui), **data integrity** (Seal), **efficient storage** (Walrus), **fast queries** (Nautilus), and **user-friendly interfaces** (React frontend + Chrome extension).
 
@@ -521,11 +630,19 @@ All images are normalized before hashing to ensure consistent verification:
 
 ### Try It Out
 
+**Via Web Platform:**
+1. **Visit the web application** (see Frontend Setup above)
+2. **Upload an image** in the Register section
+3. **Connect your Sui wallet** (optional, for wallet-based registration)
+4. **Register media** and view transaction details
+5. **Verify media** by uploading files in the Verify section
+
+**Via Browser Extension:**
 1. **Install the extension** (see Installation above)
 2. **Visit any website** with images (e.g., Unsplash, Twitter)
 3. **Watch badges appear** automatically on verified media
-4. **Right-click any image** → "Verify with TruthChain"
-5. **Register new media** → Right-click → "Register with TruthChain"
+4. **Hover over images** to see verification badges
+5. **Right-click any image** → "Verify with TruthChain" or "Register with TruthChain"
 
 ### Demo Video Script
 
