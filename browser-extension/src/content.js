@@ -81,6 +81,12 @@ function attachMediaHoverListeners(element) {
       if (mediaUrl && currentActiveOverlayUrl === mediaUrl) {
         return; // Already showing overlay for this media
       }
+      
+      // Remove badge from any previously hovered image
+      if (currentActiveOverlayUrl && currentActiveOverlayUrl !== mediaUrl) {
+        removeBadgeForImage(currentActiveOverlayUrl);
+      }
+      
       showHoverOverlay(element);
       // Also show badge if verification status exists
       if (mediaUrl) {
@@ -109,12 +115,14 @@ function attachMediaHoverListeners(element) {
       clearTimeout(hoverTimeout);
       hoverTimeout = null;
     }
-    hideHoverOverlay(element);
-    // Also hide badge when leaving
+    
+    // Immediately hide overlay and badge when cursor leaves
     const mediaUrl = getMediaUrlFromElement(element);
     if (mediaUrl) {
+      // Remove badge immediately (no delay)
       removeBadgeForImage(mediaUrl);
     }
+    hideHoverOverlay(element);
   };
 
   // Use capture phase for all elements to ensure we catch events before other handlers
@@ -280,7 +288,6 @@ function initializeMediaHoverSystem() {
 function ensureRuntimeAvailable() {
   try {
     if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
-      console.warn('Extension context invalidated. The extension may have been reloaded.');
       return false;
     }
     // Test if runtime is actually available by trying to access getURL
@@ -288,13 +295,13 @@ function ensureRuntimeAvailable() {
       try {
         chrome.runtime.getURL('test');
       } catch (e) {
-        console.warn('Extension context invalidated (getURL test failed).');
+        // Context invalidated - return false silently (error will be handled by caller)
         return false;
       }
     }
     return true;
   } catch (error) {
-    console.warn('Extension context invalidated:', error);
+    // Context invalidated - return false silently
     return false;
   }
 }
@@ -429,6 +436,9 @@ try {
       const mediaType = blob.type.startsWith('video/') ? 'video' : 'photo';
       console.log(`${mediaType} fetched, calculating hash...`);
       
+      // Store original blob for fallback verification (before normalization)
+      const originalBlob = blob.type.startsWith('image/') ? blob : null;
+      
       // For videos, we might want to hash just the first frame or a sample
       // For now, hash the entire file (might be slow for large videos)
       const hash = await calculateHash(blob);
@@ -450,10 +460,30 @@ try {
   
       // Use Promise-based message sending
       console.log('Sending hash to background script for verification...');
-      const result = await sendMessageToBackground({
+      let result = await sendMessageToBackground({
         action: 'verify-hash',
         hash
       });
+  
+      // If verification fails with normalized hash, try non-normalized hash as fallback
+      // This handles images registered before normalization was added
+      if (result.status !== 'verified' && originalBlob) {
+        console.log('Normalized hash not found, trying non-normalized hash as fallback...');
+        const nonNormalizedHash = await calculateHashWithoutNormalization(originalBlob);
+        console.log('Non-normalized hash:', nonNormalizedHash);
+        if (nonNormalizedHash !== hash) {
+          const fallbackResult = await sendMessageToBackground({
+            action: 'verify-hash',
+            hash: nonNormalizedHash
+          });
+          if (fallbackResult.status === 'verified') {
+            console.log('Found match with non-normalized hash (image registered before normalization)');
+            result = fallbackResult;
+            // Cache with the normalized hash so future verifications work
+            verifiedHashes.add(hash);
+          }
+        }
+      }
   
       // Cache verified hashes
       if (result.status === 'verified') {
@@ -613,15 +643,39 @@ try {
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { 
+        willReadFrequently: false,
+        alpha: true,
+        desynchronized: false
+      });
+      
+      // Clear canvas to ensure consistent background
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw image (this strips all metadata)
       ctx.drawImage(img, 0, 0);
       
       // Convert back to blob (normalized, no metadata)
+      // Always use PNG format for consistency - this ensures the same image always produces the same hash
+      // regardless of original format (JPEG, WebP, etc.)
       const normalizedBlob = await new Promise((resolve) => {
         canvas.toBlob((normalized) => {
           URL.revokeObjectURL(imageUrl);
-          resolve(normalized || blob); // Fallback to original if conversion fails
-        }, blob.type || 'image/png', 1.0); // Use original type, max quality
+          if (!normalized) {
+            console.warn('Canvas toBlob returned null, using original blob');
+            resolve(blob);
+            return;
+          }
+          // Ensure the blob has the correct type
+          const typedBlob = new Blob([normalized], { type: 'image/png' });
+          console.log('Image normalized successfully:', {
+            originalType: blob.type,
+            originalSize: blob.size,
+            normalizedType: typedBlob.type,
+            normalizedSize: typedBlob.size
+          });
+          resolve(typedBlob);
+        }, 'image/png', 1.0); // Always use PNG for consistent hashing, max quality
       });
       
       return normalizedBlob || blob; // Fallback to original if normalization fails
@@ -631,13 +685,25 @@ try {
     }
   }
   
-  async function calculateHash(blob) {
-    // Normalize image first to strip metadata and ensure consistent hashing
-    const normalizedBlob = await normalizeImage(blob);
-    const arrayBuffer = await normalizedBlob.arrayBuffer();
+  // Calculate hash without normalization (for fallback verification)
+  async function calculateHashWithoutNormalization(blob) {
+    const arrayBuffer = await blob.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  
+  async function calculateHash(blob) {
+    // Normalize image first to strip metadata and ensure consistent hashing
+    console.log('Calculating hash for blob type:', blob.type, 'size:', blob.size);
+    const normalizedBlob = await normalizeImage(blob);
+    console.log('Normalized blob type:', normalizedBlob.type, 'size:', normalizedBlob.size, 'was normalized:', normalizedBlob !== blob);
+    const arrayBuffer = await normalizedBlob.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log('Calculated hash:', hash);
+    return hash;
   }
   
   function findMediaByUrl(mediaUrl) {
@@ -1403,17 +1469,18 @@ function updateSidebarWithResult(mediaUrl, result) {
   
   // Helper function to get logo URL
   function getLogoUrl(logoName = 'truthchain-icon-blue.png') {
+    // Check if runtime is available first
+    if (!ensureRuntimeAvailable()) {
+      // Return a data URI placeholder if extension context is invalid
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnptLTIgMTVsLTUtNSAxLjQxLTEuNDFMMTAgMTQuMTdsNy41OS03LjU5TDE5IDhsLTkgOXoiIGZpbGw9IiMxMEI5ODEiLz48L3N2Zz4=';
+    }
+    
     try {
-      if (!ensureRuntimeAvailable()) {
-        // Return a data URI placeholder if extension context is invalid
-        return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnptLTIgMTVsLTUtNSAxLjQxLTEuNDFMMTAgMTQuMTdsNy41OS03LjU5TDE5IDhsLTkgOXoiIGZpbGw9IiMxMEI5ODEiLz48L3N2Zz4=';
-      }
       const url = chrome.runtime.getURL(`icons/${logoName}`);
       console.log('Getting logo URL:', url);
       return url;
     } catch (error) {
-      console.warn('Extension context invalidated, using fallback logo:', error);
-      // Return a data URI placeholder
+      // If getURL throws, return fallback (shouldn't happen if ensureRuntimeAvailable passed)
       return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkM2LjQ4IDIgMiA2LjQ4IDIgMTJzNC40OCAxMCAxMCAxMCAxMC00LjQ4IDEwLTEwUzE3LjUyIDIgMTIgMnptLTIgMTVsLTUtNSAxLjQxLTEuNDFMMTAgMTQuMTdsNy41OS03LjU5TDE5IDhsLTkgOXoiIGZpbGw9IiMxMEI5ODEiLz48L3N2Zz4=';
     }
   }
@@ -1668,14 +1735,32 @@ async function registerMedia(mediaUrl, options = {}) {
     return result;
       
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const isContextInvalidated = errorMsg.includes('Extension context invalidated') || 
+                                    errorMsg.includes('message port closed') ||
+                                    errorMsg.includes('Receiving end does not exist');
+      
+      if (isContextInvalidated) {
+        console.warn('Extension context invalidated during registration. The extension may have been reloaded.');
+        // Don't store error status for context invalidation - just log it
+        // The user will need to reload the page to continue
+        updateSidebarWithResult(mediaUrl, {
+          status: 'error',
+          message: 'Extension context invalidated. Please reload the page to continue.'
+        });
+        // Don't throw - just return null to indicate failure
+        return null;
+      }
+      
       console.error('Registration error:', error);
       // Store error status - badge will show on hover if needed
       mediaStatus.set(mediaUrl, {
         status: 'error',
-        message: error.message
+        message: errorMsg
       });
       updateOverlayStatus(mediaUrl);
       updateSidebarWithResult(mediaUrl, error);
+      throw error; // Re-throw non-context-invalidation errors
     } finally {
       verifyingUrls.delete(mediaUrl);
     }
@@ -1887,13 +1972,21 @@ async function registerMedia(mediaUrl, options = {}) {
   }
 
   function removeBadgeForImage(mediaUrl) {
+    // Remove tracked badge
     const badgeData = mediaBadges.get(mediaUrl);
     if (badgeData) {
       if (badgeData.cleanup) {
         badgeData.cleanup();
       }
-      if (badgeData.badge && badgeData.badge.parentElement) {
-        badgeData.badge.parentElement.removeChild(badgeData.badge);
+      if (badgeData.badge) {
+        // Hide immediately with display: none
+        badgeData.badge.style.display = 'none';
+        badgeData.badge.style.visibility = 'hidden';
+        badgeData.badge.style.opacity = '0';
+        // Then remove from DOM
+        if (badgeData.badge.parentElement) {
+          badgeData.badge.parentElement.removeChild(badgeData.badge);
+        }
       }
       mediaBadges.delete(mediaUrl);
     }
@@ -1904,6 +1997,11 @@ async function registerMedia(mediaUrl, options = {}) {
     allBadges.forEach(badge => {
       const badgeMediaUrl = badge.getAttribute('data-media-url');
       if (badgeMediaUrl === mediaUrl) {
+        // Hide immediately
+        badge.style.display = 'none';
+        badge.style.visibility = 'hidden';
+        badge.style.opacity = '0';
+        // Then remove from DOM
         if (badge.parentElement) {
           badge.parentElement.removeChild(badge);
         }

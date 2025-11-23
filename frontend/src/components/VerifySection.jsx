@@ -50,15 +50,39 @@ function VerifySection() {
       const canvas = document.createElement('canvas')
       canvas.width = img.width
       canvas.height = img.height
-      const ctx = canvas.getContext('2d')
+      const ctx = canvas.getContext('2d', { 
+        willReadFrequently: false,
+        alpha: true,
+        desynchronized: false
+      })
+      
+      // Clear canvas to ensure consistent background
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      
+      // Draw image (this strips all metadata)
       ctx.drawImage(img, 0, 0)
       
       // Convert back to blob (normalized, no metadata)
+      // Always use PNG format for consistency - this ensures the same image always produces the same hash
+      // regardless of original format (JPEG, WebP, etc.)
       const normalizedBlob = await new Promise((resolve) => {
         canvas.toBlob((normalized) => {
           URL.revokeObjectURL(imageUrl)
-          resolve(normalized || blob) // Fallback to original if conversion fails
-        }, blob.type || 'image/png', 1.0) // Use original type, max quality
+          if (!normalized) {
+            console.warn('Canvas toBlob returned null, using original blob')
+            resolve(blob)
+            return
+          }
+          // Ensure the blob has the correct type
+          const typedBlob = new Blob([normalized], { type: 'image/png' })
+          console.log('Image normalized successfully:', {
+            originalType: blob.type,
+            originalSize: blob.size,
+            normalizedType: typedBlob.type,
+            normalizedSize: typedBlob.size
+          })
+          resolve(typedBlob)
+        }, 'image/png', 1.0) // Always use PNG for consistent hashing, max quality
       })
       
       return normalizedBlob || blob // Fallback to original if normalization fails
@@ -68,13 +92,25 @@ function VerifySection() {
     }
   }
 
-  const calculateHash = async (blob) => {
-    // Normalize image first to strip metadata and ensure consistent hashing
-    const normalizedBlob = await normalizeImage(blob)
-    const arrayBuffer = await normalizedBlob.arrayBuffer()
+  // Calculate hash without normalization (for fallback verification)
+  const calculateHashWithoutNormalization = async (blob) => {
+    const arrayBuffer = await blob.arrayBuffer()
     const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
     const hashArray = Array.from(new Uint8Array(hashBuffer))
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+
+  const calculateHash = async (blob) => {
+    // Normalize image first to strip metadata and ensure consistent hashing
+    console.log('Calculating hash for blob type:', blob.type, 'size:', blob.size)
+    const normalizedBlob = await normalizeImage(blob)
+    console.log('Normalized blob type:', normalizedBlob.type, 'size:', normalizedBlob.size, 'was normalized:', normalizedBlob !== blob)
+    const arrayBuffer = await normalizedBlob.arrayBuffer()
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    console.log('Calculated hash:', hash)
+    return hash
   }
 
   const handleVerify = async (e) => {
@@ -89,11 +125,11 @@ function VerifySection() {
     setResult(null)
 
     try {
-      // Calculate hash
+      // Calculate hash (normalized)
       const hash = await calculateHash(file)
       
-      // Verify with backend
-      const response = await fetch(`${API_BASE}/verify`, {
+      // Verify with backend using normalized hash
+      let response = await fetch(`${API_BASE}/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +142,33 @@ function VerifySection() {
         throw new Error(errorData.message || 'Verification failed')
       }
 
-      const data = await response.json()
+      let data = await response.json()
+      
+      // If verification fails with normalized hash, try non-normalized hash as fallback
+      // This handles images registered before normalization was added
+      if (data.status !== 'verified' && file.type.startsWith('image/')) {
+        console.log('Normalized hash not found, trying non-normalized hash as fallback...')
+        const nonNormalizedHash = await calculateHashWithoutNormalization(file)
+        console.log('Non-normalized hash:', nonNormalizedHash)
+        if (nonNormalizedHash !== hash) {
+          const fallbackResponse = await fetch(`${API_BASE}/verify`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ hash: nonNormalizedHash })
+          })
+          
+          if (fallbackResponse.ok) {
+            const fallbackData = await fallbackResponse.json()
+            if (fallbackData.status === 'verified') {
+              console.log('Found match with non-normalized hash (image registered before normalization)')
+              data = fallbackData
+            }
+          }
+        }
+      }
+      
       setResult(data)
     } catch (err) {
       setError(err.message || 'Failed to verify media')
