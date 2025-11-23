@@ -1061,62 +1061,86 @@ function renderSidebarState(mediaUrl, { state, result, message }) {
     successMessage.textContent = 'Your media has been registered on Sui blockchain. Verifying...';
     sidebarContent.appendChild(successMessage);
 
-    const metaList = document.createElement('div');
-    metaList.className = 'truthchain-sidebar-meta';
-    metaList.style.marginTop = '16px';
+    if (result) {
+      const metaList = document.createElement('div');
+      metaList.className = 'truthchain-sidebar-meta';
+      metaList.style.marginTop = '16px';
 
-    if (result.hash) {
-      const hashRow = document.createElement('div');
-      hashRow.className = 'truthchain-sidebar-meta-row';
-      hashRow.innerHTML = `<span>Hash</span><code>${result.hash.slice(0, 12)}…${result.hash.slice(-8)}</code>`;
-      metaList.appendChild(hashRow);
-    }
+      if (result.hash) {
+        const hashRow = document.createElement('div');
+        hashRow.className = 'truthchain-sidebar-meta-row';
+        const hashLabel = document.createElement('span');
+        hashLabel.textContent = 'Hash';
+        const hashCode = document.createElement('code');
+        hashCode.textContent = `${result.hash.slice(0, 12)}…${result.hash.slice(-8)}`;
+        hashRow.appendChild(hashLabel);
+        hashRow.appendChild(hashCode);
+        metaList.appendChild(hashRow);
+      }
 
-    if (result.txDigest) {
-      const txRow = document.createElement('div');
-      txRow.className = 'truthchain-sidebar-meta-row';
-      const txLink = document.createElement('a');
-      txLink.href = `https://suiexplorer.com/txblock/${result.txDigest}?network=testnet`;
-      txLink.target = '_blank';
-      txLink.rel = 'noopener noreferrer';
-      txLink.style.color = '#0EA5E9';
-      txLink.style.textDecoration = 'none';
-      txLink.textContent = `${result.txDigest.slice(0, 12)}…${result.txDigest.slice(-8)}`;
-      txLink.addEventListener('mouseenter', () => {
-        txLink.style.textDecoration = 'underline';
-      });
-      txLink.addEventListener('mouseleave', () => {
+      if (result.txDigest) {
+        const txRow = document.createElement('div');
+        txRow.className = 'truthchain-sidebar-meta-row';
+        const txLabel = document.createElement('span');
+        txLabel.textContent = 'Transaction';
+        const codeEl = document.createElement('code');
+        const txLink = document.createElement('a');
+        txLink.href = `https://suiexplorer.com/txblock/${result.txDigest}?network=testnet`;
+        txLink.target = '_blank';
+        txLink.rel = 'noopener noreferrer';
+        txLink.style.color = '#0EA5E9';
         txLink.style.textDecoration = 'none';
-      });
-      txRow.innerHTML = '<span>Transaction</span>';
-      const codeEl = document.createElement('code');
-      codeEl.appendChild(txLink);
-      txRow.appendChild(codeEl);
-      metaList.appendChild(txRow);
-    }
+        txLink.textContent = `${result.txDigest.slice(0, 12)}…${result.txDigest.slice(-8)}`;
+        txLink.addEventListener('mouseenter', () => {
+          txLink.style.textDecoration = 'underline';
+        });
+        txLink.addEventListener('mouseleave', () => {
+          txLink.style.textDecoration = 'none';
+        });
+        codeEl.appendChild(txLink);
+        txRow.appendChild(txLabel);
+        txRow.appendChild(codeEl);
+        metaList.appendChild(txRow);
+      }
 
-    if (result.attestationId) {
-      const attRow = document.createElement('div');
-      attRow.className = 'truthchain-sidebar-meta-row';
-      attRow.innerHTML = `<span>Attestation ID</span><code>${result.attestationId.slice(0, 12)}…${result.attestationId.slice(-8)}</code>`;
-      metaList.appendChild(attRow);
-    }
+      if (result.attestationId) {
+        const attRow = document.createElement('div');
+        attRow.className = 'truthchain-sidebar-meta-row';
+        const attLabel = document.createElement('span');
+        attLabel.textContent = 'Attestation ID';
+        const attCode = document.createElement('code');
+        attCode.textContent = `${result.attestationId.slice(0, 12)}…${result.attestationId.slice(-8)}`;
+        attRow.appendChild(attLabel);
+        attRow.appendChild(attCode);
+        metaList.appendChild(attRow);
+      }
 
-    if (result.walrus_blob_id) {
-      const walrusRow = document.createElement('div');
-      walrusRow.className = 'truthchain-sidebar-meta-row';
-      walrusRow.innerHTML = `<span>Walrus Blob</span><code>${result.walrus_blob_id.slice(0, 10)}…</code>`;
-      metaList.appendChild(walrusRow);
-    }
+      if (result.walrus_blob_id) {
+        const walrusRow = document.createElement('div');
+        walrusRow.className = 'truthchain-sidebar-meta-row';
+        const walrusLabel = document.createElement('span');
+        walrusLabel.textContent = 'Walrus Blob';
+        const walrusCode = document.createElement('code');
+        walrusCode.textContent = `${result.walrus_blob_id.slice(0, 10)}…`;
+        walrusRow.appendChild(walrusLabel);
+        walrusRow.appendChild(walrusCode);
+        metaList.appendChild(walrusRow);
+      }
 
-    if (result.creator) {
-      const creatorRow = document.createElement('div');
-      creatorRow.className = 'truthchain-sidebar-meta-row';
-      creatorRow.innerHTML = `<span>Creator</span><code>${result.creator.slice(0, 10)}…${result.creator.slice(-6)}</code>`;
-      metaList.appendChild(creatorRow);
-    }
+      if (result.creator) {
+        const creatorRow = document.createElement('div');
+        creatorRow.className = 'truthchain-sidebar-meta-row';
+        const creatorLabel = document.createElement('span');
+        creatorLabel.textContent = 'Creator';
+        const creatorCode = document.createElement('code');
+        creatorCode.textContent = `${result.creator.slice(0, 10)}…${result.creator.slice(-6)}`;
+        creatorRow.appendChild(creatorLabel);
+        creatorRow.appendChild(creatorCode);
+        metaList.appendChild(creatorRow);
+      }
 
-    sidebarContent.appendChild(metaList);
+      sidebarContent.appendChild(metaList);
+    }
     return;
   }
 
