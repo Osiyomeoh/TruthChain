@@ -19,11 +19,6 @@ function FeaturesSection() {
       description: 'Decentralized blob storage for media metadata and proofs'
     },
     {
-      icon: 'Lock',
-      title: 'Seal Proofs',
-      description: 'Cryptographic integrity proofs ensure data hasn\'t been tampered with'
-    },
-    {
       icon: 'Fast',
       title: 'Zero Friction',
       description: 'Right-click to verify or register - works on any website and social platform'

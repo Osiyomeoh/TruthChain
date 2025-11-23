@@ -31,13 +31,34 @@ function Terms() {
               <li>Access verification services through our web interface and browser extension</li>
             </ul>
             <p>
-              The Service utilizes Sui blockchain, Walrus storage, Seal proofs, and Nautilus search technologies to provide 
+              The Service utilizes Sui blockchain, Walrus storage, and Nautilus search technologies to provide 
               decentralized, immutable media verification.
             </p>
           </section>
 
           <section className="terms-section">
-            <h2>3. User Responsibilities</h2>
+            <h2>3. Non-Commercial Use Only</h2>
+            <p>
+              <strong>IMPORTANT: TruthChain is provided for NON-COMMERCIAL USE ONLY.</strong>
+            </p>
+            <p>You agree that you will NOT use TruthChain for any commercial purposes, including but not limited to:</p>
+            <ul>
+              <li>Selling the Service or any derivative works</li>
+              <li>Using the Service in a commercial product or service</li>
+              <li>Using the Service for profit-generating activities</li>
+              <li>Incorporating the Service into a commercial offering</li>
+              <li>Using the Service to provide services for which you charge fees</li>
+            </ul>
+            <p>
+              <strong>Permitted Uses:</strong> Personal, educational, research, hackathon, and academic use are permitted under this non-commercial license.
+            </p>
+            <p>
+              <strong>Commercial Licensing:</strong> For commercial use, you must obtain a separate commercial license from the copyright holders. Please contact the project maintainers for commercial licensing inquiries.
+            </p>
+          </section>
+
+          <section className="terms-section">
+            <h2>4. User Responsibilities</h2>
             <p>You agree to:</p>
             <ul>
               <li>Provide accurate information when registering media</li>
@@ -50,7 +71,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>4. Blockchain Transactions</h2>
+            <h2>5. Blockchain Transactions</h2>
             <p>
               When you register media using wallet-based registration, you are responsible for:
             </p>
@@ -67,7 +88,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>5. AI-Generated Content</h2>
+            <h2>6. AI-Generated Content</h2>
             <p>
               TruthChain includes automatic detection of AI-generated content. This detection is provided for informational purposes only 
               and should not be considered definitive proof. You are responsible for accurately marking content as AI-generated when registering media.
@@ -78,7 +99,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>6. Intellectual Property</h2>
+            <h2>7. Intellectual Property</h2>
             <p>
               You retain all ownership rights to the media you register. By registering media on TruthChain, you grant us a limited, 
               non-exclusive license to:
@@ -94,7 +115,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>7. Privacy and Data</h2>
+            <h2>8. Privacy and Data</h2>
             <p>
               TruthChain processes media hashes and metadata to provide verification services. We do not store the actual media files 
               on our servers. Media metadata is stored on decentralized storage (Walrus) and attestations are recorded on the Sui blockchain.
@@ -106,7 +127,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>8. Service Availability</h2>
+            <h2>9. Service Availability</h2>
             <p>
               TruthChain is provided "as is" and "as available." We do not guarantee:
             </p>
@@ -119,7 +140,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>9. Limitation of Liability</h2>
+            <h2>10. Limitation of Liability</h2>
             <p>
               To the maximum extent permitted by law, TruthChain and its operators shall not be liable for any indirect, incidental, 
               special, consequential, or punitive damages, or any loss of profits or revenues, whether incurred directly or indirectly, 
@@ -135,7 +156,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>10. Prohibited Uses</h2>
+            <h2>11. Prohibited Uses</h2>
             <p>You may not use the Service to:</p>
             <ul>
               <li>Register media that infringes on intellectual property rights</li>
@@ -148,7 +169,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>11. Modifications to Terms</h2>
+            <h2>12. Modifications to Terms</h2>
             <p>
               We reserve the right to modify these Terms and Conditions at any time. We will notify users of material changes 
               by updating the "Last Updated" date at the top of this page. Your continued use of the Service after such modifications 
@@ -157,7 +178,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>12. Termination</h2>
+            <h2>13. Termination</h2>
             <p>
               We reserve the right to suspend or terminate your access to the Service at any time, with or without cause or notice, 
               for any reason, including if you breach these Terms and Conditions.
@@ -168,7 +189,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>13. Governing Law</h2>
+            <h2>14. Governing Law</h2>
             <p>
               These Terms and Conditions shall be governed by and construed in accordance with applicable laws, without regard to 
               conflict of law provisions. Any disputes arising from these terms or your use of the Service shall be resolved through 
@@ -177,7 +198,7 @@ function Terms() {
           </section>
 
           <section className="terms-section">
-            <h2>14. Contact Information</h2>
+            <h2>15. Contact Information</h2>
             <p>
               If you have any questions about these Terms and Conditions, please contact us through:
             </p>

@@ -114,7 +114,7 @@ export function registerRoutes(app: Express) {
       name: 'TruthChain API',
       version: '1.0.0',
       network: process.env.SUI_NETWORK || 'testnet',
-      technologies: ['Walrus', 'Seal', 'Nautilus', 'Sui'],
+      technologies: ['Walrus', 'Nautilus', 'Sui'],
       endpoints: {
         register: 'POST /v1/register',
         verify: 'POST /v1/verify',

@@ -1,9 +1,11 @@
 # TruthChain - Provably Authentic Media Verification
 
-> **A decentralized media authenticity platform using Walrus, Seal, Nautilus, and Sui blockchain**
+> **A decentralized media authenticity platform using Walrus, Nautilus, and Sui blockchain**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Non-Commercial](https://img.shields.io/badge/License-Non--Commercial-red.svg)](LICENSE)
 [![Built for Walrus Haulout Hackathon](https://img.shields.io/badge/Hackathon-Walrus%20Haulout-blue)](https://haulout.devpost.com)
+
+> ⚠️ **NON-COMMERCIAL USE ONLY**: This software is provided for **educational, research, and hackathon purposes only**. Commercial use is strictly prohibited without explicit written permission. See [LICENSE](LICENSE) for details.
 
 ## 🏆 Hackathon Track: Provably Authentic (Truth Engine + Trust Oracle)
 
@@ -13,8 +15,7 @@ TruthChain is a **decentralized media authenticity platform** that **instantly v
 **🔌 Browser Extension**: Seamless verification on any website as you browse
 
 Both interfaces leverage:
-- **🦭 Walrus**: Decentralized blob storage for media metadata and proofs
-- **🔒 Seal**: Cryptographic integrity proofs for data verification
+- **🦭 Walrus**: Decentralized blob storage for media metadata
 - **🔍 Nautilus**: Fast indexing and search for attestations
 - **⛓️ Sui Blockchain**: Immutable on-chain attestation registry
 
@@ -52,8 +53,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 - Image normalization ensures consistent hashing across formats
 
 ### 🔐 **Decentralized Architecture**
-- **Walrus**: Stores media metadata and Seal proofs as blobs
-- **Seal**: Generates Merkle tree proofs for data integrity
+- **Walrus**: Stores media metadata as blobs
 - **Nautilus**: Indexes attestations for fast search and analytics
 - **Sui**: On-chain attestation registry for immutable verification
 
@@ -101,11 +101,11 @@ Both interfaces work together to provide comprehensive media authenticity verifi
       └──────┬──────┘  └──────┬───────┘
              │                │
              ▼                ▼
-      ┌─────────────┐  ┌──────────────┐
-      │    Seal     │  │  Nautilus   │
-      │  (Merkle    │  │  (Indexing  │
-      │   Proofs)   │  │   & Search) │
-      └─────────────┘  └──────────────┘
+      ┌──────────────┐
+      │  Nautilus   │
+      │  (Indexing  │
+      │   & Search) │
+      └──────────────┘
 ```
 
 ### Technology Stack
@@ -126,7 +126,6 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 - Node.js + Express
 - TypeScript
 - Walrus SDK integration
-- Seal proof generation
 - Nautilus indexing service
 - Sui SDK for blockchain interactions
 
@@ -166,40 +165,19 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 - Provides redundancy through RS2 encoding
 
 **How it's used:**
-- **Blob Storage**: Stores JSON containing media hash, metadata (source, creator, timestamps), and Seal proof
+- **Blob Storage**: Stores JSON containing media hash and metadata (source, creator, timestamps)
 - **Publisher API**: Uploads blobs via `PUT /v1/blobs?epochs=5` endpoint
 - **Aggregator API**: Retrieves blobs by blob ID
 - **Blob ID**: Returns unique identifier (e.g., `FY-72_RfZby6TkHIitCf4EBWkqepsZn4Io_HHvDrfhg`) stored on-chain
 
 **Implementation:**
-- Registration: Uploads metadata + Seal proof as blob, stores blob ID on-chain
+- Registration: Uploads metadata as blob, stores blob ID on-chain
 - Verification: Retrieves blob from aggregator using blob ID from attestation
-- Data Structure: `{ hash, metadata }` where metadata includes source, creator, timestamps, and Seal proof
+- Data Structure: `{ hash, metadata }` where metadata includes source, creator, and timestamps
 
 ---
 
-### 3. **Seal** 🔒
-
-**What it does:**
-- Generates cryptographic integrity proofs using Merkle trees
-- Detects any tampering or modification of data
-- Provides lightweight proofs for verification
-
-**How it's used:**
-- **Merkle Tree Generation**: Chunks data into 1KB pieces, builds binary Merkle tree
-- **Root Hash**: Serves as integrity proof - any data change changes the root
-- **Proof Storage**: Merkle root stored with metadata in Walrus blob
-- **Verification**: Rebuilds Merkle tree from data and compares root hash
-
-**Implementation:**
-- `SealVerifier` class in `backend/src/services/seal.ts`
-- `generateProof()`: Creates Merkle tree from data chunks
-- `verifyProof()`: Validates data integrity by comparing root hashes
-- Used for both metadata integrity and media content verification
-
----
-
-### 4. **Nautilus** 🔍
+### 3. **Nautilus** 🔍
 
 **What it does:**
 - Fast indexing and querying infrastructure for Sui data
@@ -376,7 +354,6 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 **How it's used in Backend:**
 - **Hash Validation**: Validates hash format (64 characters)
 - **Blockchain Queries**: Uses hash to query Sui blockchain for attestations
-- **Seal Proofs**: Hash is included in Seal Merkle tree proofs
 
 **Implementation:**
 - **Extension**: `crypto.subtle.digest('SHA-256', arrayBuffer)` in `browser-extension/src/content.js`
@@ -412,8 +389,8 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 1. User hovers over image → Extension detects media
 2. Extension: Canvas API normalizes image → SHA-256 hash calculated
 3. Extension: Sends hash + metadata to backend API
-4. Backend: Zod validates request → Seal generates Merkle proof
-5. Backend: Walrus stores metadata + proof as blob → Returns blob ID
+4. Backend: Zod validates request
+5. Backend: Walrus stores metadata as blob → Returns blob ID
 6. Backend: Sui SDK creates on-chain transaction → Stores attestation
 7. Backend: Nautilus indexes attestation for search
 8. Response: Returns attestation ID, transaction hash, blob ID to extension
@@ -424,7 +401,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 3. Frontend: User selects registration method (Backend or Wallet)
 4. If Backend: Sends hash + metadata to backend API (same as extension flow)
 5. If Wallet: User connects wallet → Frontend builds transaction → User signs → Backend indexes
-6. Backend: Zod validates → Seal generates proof → Walrus upload → Sui transaction → Nautilus index
+6. Backend: Zod validates → Walrus upload → Sui transaction → Nautilus index
 7. Response: Returns attestation ID, transaction hash, blob ID to frontend
 
 ### Verification Process:
@@ -434,10 +411,9 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 2. Extension: Sends hash to backend API
 3. Backend: Sui SDK queries blockchain for attestation by hash
 4. Backend: Retrieves blob from Walrus using blob ID
-5. Backend: Verifies Seal proof integrity
-6. Backend: Updates Nautilus verification count
-7. Response: Returns verification status and attestation details to extension
-8. Extension: Displays badge with verification status
+5. Backend: Updates Nautilus verification count
+6. Response: Returns verification status and attestation details to extension
+7. Extension: Displays badge with verification status
 
 **Via Frontend:**
 1. User uploads file → Frontend processes file
@@ -445,10 +421,9 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 3. Frontend: Sends hash to backend API
 4. Backend: Sui SDK queries blockchain for attestation by hash
 5. Backend: Retrieves blob from Walrus using blob ID
-6. Backend: Verifies Seal proof integrity
-7. Backend: Updates Nautilus verification count
-8. Response: Returns verification status and attestation details to frontend
-9. Frontend: Displays verification result with attestation details
+6. Backend: Updates Nautilus verification count
+7. Response: Returns verification status and attestation details to frontend
+8. Frontend: Displays verification result with attestation details
 
 ### Key Differences:
 
@@ -466,7 +441,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 - More detailed UI with metadata display
 - Can connect Sui wallet for direct transactions
 
-This architecture provides **decentralization** (Sui), **data integrity** (Seal), **efficient storage** (Walrus), **fast queries** (Nautilus), and **user-friendly interfaces** (React frontend + Chrome extension).
+This architecture provides **decentralization** (Sui), **efficient storage** (Walrus), **fast queries** (Nautilus), and **user-friendly interfaces** (React frontend + Chrome extension).
 
 ## 🚀 Quick Start
 
@@ -584,11 +559,10 @@ All images are normalized before hashing to ensure consistent verification:
 1. Receives hash + metadata
 2. AI detection analysis
 3. Similarity check (prevents duplicates)
-4. Seal proof generation (Merkle tree)
-5. Upload to Walrus (metadata + proof)
-6. Create Sui transaction (`register_media`)
-7. Index in Nautilus
-8. Return attestation ID + transaction hash
+4. Upload to Walrus (metadata)
+5. Create Sui transaction (`register_media`)
+6. Index in Nautilus
+7. Return attestation ID + transaction hash
 
 ### Verification Flow
 
@@ -614,9 +588,8 @@ All images are normalized before hashing to ensure consistent verification:
 1. Receives hash
 2. Query Sui blockchain for attestation
 3. If found: Retrieve from Walrus
-4. Verify Seal proof
-5. Update verification count in Nautilus
-6. Return attestation details
+4. Update verification count in Nautilus
+5. Return attestation details
 
 ### Search & Analytics Flow
 
@@ -662,7 +635,7 @@ All images are normalized before hashing to ensure consistent verification:
 
 **✅ Authenticity on-chain**: Media hashes stored immutably on Sui blockchain
 
-**✅ Verify provenance**: Complete chain from media → hash → Walrus → Seal → Nautilus → Sui
+**✅ Verify provenance**: Complete chain from media → hash → Walrus → Nautilus → Sui
 
 **✅ Trust Oracle**: Decentralized verification without central authority
 
@@ -674,11 +647,6 @@ All images are normalized before hashing to ensure consistent verification:
 - ✅ **Decentralized**: No single point of failure
 - ✅ **Retrievable**: Blobs can be fetched via aggregator API
 
-### Seal Integration
-
-- ✅ **Integrity Proofs**: Merkle tree proofs for data verification
-- ✅ **Tamper Detection**: Any modification breaks the proof
-- ✅ **Efficient**: Lightweight proofs stored with metadata
 
 ### Nautilus Integration
 
@@ -702,7 +670,7 @@ All images are normalized before hashing to ensure consistent verification:
 - **Indexing**: Nautilus (real-time search)
 - **Verification Speed**: < 2 seconds
 - **Auto-Verification**: First 20 media elements per page
-- **Technologies**: Walrus ✅ Seal ✅ Nautilus ✅ Sui ✅
+- **Technologies**: Walrus ✅ Nautilus ✅ Sui ✅
 
 ## 🔌 API Endpoints
 
@@ -755,7 +723,29 @@ This project was built for the Walrus Haulout Hackathon. Contributions welcome!
 
 ## 📝 License
 
-MIT License - see LICENSE file for details
+**NON-COMMERCIAL LICENSE**
+
+This project is licensed under a **Non-Commercial License**. 
+
+**⚠️ IMPORTANT: This software is NOT for commercial use.**
+
+### What is Allowed:
+- ✅ Personal, educational, and research use
+- ✅ Hackathon and academic projects
+- ✅ Non-profit and open-source projects
+- ✅ Learning and experimentation
+
+### What is NOT Allowed:
+- ❌ Commercial use of any kind
+- ❌ Selling the software or derivative works
+- ❌ Using in commercial products or services
+- ❌ Using for profit-generating activities
+- ❌ Incorporating into commercial offerings
+
+### Commercial Licensing:
+For commercial use, you must obtain a separate commercial license. Please contact the project maintainers for commercial licensing inquiries.
+
+See the [LICENSE](LICENSE) file for full terms and conditions.
 
 ## 👥 Team
 
@@ -814,8 +804,7 @@ To get these values after deployment:
 2. **Hash Calculation**: Same normalization and hashing as verification
 3. **Registration Request**: Sends hash + metadata to backend via `POST /v1/register`
 4. **Backend Processing**:
-   - Generates Seal proof (Merkle tree)
-   - Uploads metadata + proof to Walrus
+   - Uploads metadata to Walrus
    - Creates on-chain attestation on Sui
    - Indexes in Nautilus
 5. **Success Display**: Sidebar shows registration success with transaction hash
@@ -871,8 +860,7 @@ To get these values after deployment:
    - AI Detection: Analyzes metadata for AI-generated content
    - Similarity Detection: Checks for similar images already registered
    - Reputation Check: Validates creator reputation
-3. **Seal Proof Generation**: Creates Merkle tree proof for data integrity
-4. **Walrus Upload**: Uploads metadata + Seal proof as blob
+3. **Walrus Upload**: Uploads metadata as blob
 5. **Blockchain Transaction**: 
    - Creates Sui transaction with `register_media` function
    - Includes: hash, walrus_blob_id, source, media_type, is_ai_generated
@@ -883,8 +871,7 @@ To get these values after deployment:
 #### Verification Endpoint (`POST /v1/verify`)
 1. **Hash Lookup**: Queries Sui blockchain for attestation by hash
 2. **Attestation Retrieval**: Fetches attestation object from Sui
-3. **Walrus Retrieval**: Fetches metadata + Seal proof from Walrus
-4. **Proof Verification**: Verifies Seal proof integrity
+3. **Walrus Retrieval**: Fetches metadata from Walrus
 5. **Update Count**: Increments verification count in Nautilus
 6. **Response**: Returns verification status, attestation details, creator info
 
