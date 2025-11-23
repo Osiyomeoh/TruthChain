@@ -1,4 +1,3 @@
-// Popup script for TruthChain extension
 document.addEventListener('DOMContentLoaded', async () => {
   const contentDiv = document.getElementById('content');
   

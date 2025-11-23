@@ -54,7 +54,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 async function sendVerifyRequest(tabId, mediaUrl) {
   try {
-    console.log('Attempting to send message to content script...');
     const response = await sendMessageToContentScript(tabId, { action: 'verify-media', url: mediaUrl });
     console.log('Message sent to content script successfully, response:', response);
     return;
@@ -283,7 +282,6 @@ async function clearCachedVerification(hash) {
 
 async function sendRegisterRequest(tabId, mediaUrl) {
   try {
-    console.log('Attempting to send register request to content script...');
     const response = await sendMessageToContentScript(tabId, { action: 'register-media', url: mediaUrl });
     console.log('Register message sent to content script successfully, response:', response);
     return;

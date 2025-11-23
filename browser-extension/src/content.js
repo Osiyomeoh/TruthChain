@@ -1,6 +1,3 @@
-// Log that content script is loaded
-console.log('✅ TruthChain content script loaded at', new Date().toISOString());
-console.log('Content script location:', window.location.href);
 
 // Store badges per media URL to support multiple badges
 const mediaBadges = new Map(); // Map<mediaUrl, { badge, element, cleanup }>
@@ -418,9 +415,7 @@ try {
       
       // Loading badges are now hover-based, not shown immediately
   
-      // Try to fetch the media - handle CORS issues
-      // Use Accept headers to request the same format the browser would download
-      // This ensures we get the same image quality/format as a browser download
+      // Fetch media with Accept headers to match browser download format
       const fetchOptions = {
         headers: {
           'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
@@ -579,10 +574,7 @@ try {
     }
   }
   
-  // Auto-verification: Scan and verify all images/videos on page
   async function startAutoVerification() {
-    console.log('Starting auto-verification...');
-    
     // Wait for page to be fully loaded
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
@@ -1804,9 +1796,7 @@ async function registerMedia(mediaUrl, options = {}) {
     verifyingUrls.add(mediaUrl);
     // Loading badges are now hover-based, not shown immediately
   
-      // Try to fetch the media - handle CORS issues
-      // Use Accept headers to request the same format the browser would download
-      // This ensures we get the same image quality/format as a browser download
+      // Fetch media with Accept headers to match browser download format
       const fetchOptions = {
         headers: {
           'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',

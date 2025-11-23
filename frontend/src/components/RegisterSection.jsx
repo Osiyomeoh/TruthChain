@@ -70,7 +70,6 @@ function RegisterSection() {
       return blob
     }
     
-    console.log('Attempting to normalize image. Original type:', blob.type, 'size:', blob.size)
     
     try {
       // Create image from blob
