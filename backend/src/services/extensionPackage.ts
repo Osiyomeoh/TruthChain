@@ -8,13 +8,28 @@ import archiver from 'archiver';
  */
 export async function packageExtension(): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    // Use process.cwd() to get project root, then navigate to browser-extension
-    const projectRoot = process.cwd();
-    const extensionDir = path.join(projectRoot, 'browser-extension');
+    // Try multiple possible locations for the browser-extension directory
+    // __dirname is backend/src/services, so we need to go up to project root
+    // backend/src/services -> backend/src -> backend -> project root
+    const possiblePaths = [
+      path.join(__dirname, '../../..', 'browser-extension'), // From backend/src/services -> project root
+      path.join(process.cwd(), '../browser-extension'), // From backend directory -> project root
+      path.join(process.cwd(), 'browser-extension'), // If already at project root
+      path.join(__dirname, '../../browser-extension'), // Alternative: backend/browser-extension (unlikely)
+    ];
+    
+    let extensionDir: string | null = null;
+    
+    for (const possiblePath of possiblePaths) {
+      if (fs.existsSync(possiblePath)) {
+        extensionDir = possiblePath;
+        break;
+      }
+    }
     
     // Check if extension directory exists
-    if (!fs.existsSync(extensionDir)) {
-      reject(new Error(`Browser extension directory not found at: ${extensionDir}`));
+    if (!extensionDir) {
+      reject(new Error(`Browser extension directory not found. Searched in: ${possiblePaths.join(', ')}. Current working directory: ${process.cwd()}, __dirname: ${__dirname}`));
       return;
     }
 
