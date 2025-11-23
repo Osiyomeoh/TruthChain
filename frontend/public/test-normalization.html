@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TruthChain Normalization Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #0EA5E9;
+      margin-top: 0;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 4px;
+    }
+    button {
+      background: #0EA5E9;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background: #0284c7;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .result {
+      margin-top: 15px;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #10b981;
+    }
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #ef4444;
+    }
+    .info {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #3b82f6;
+    }
+    .loading {
+      color: #6b7280;
+    }
+    input[type="file"] {
+      margin: 10px 0;
+    }
+    .hash-comparison {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f3f4f6;
+      border-radius: 4px;
+    }
+    .hash-match {
+      color: #10b981;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .hash-mismatch {
+      color: #ef4444;
+      font-weight: bold;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 TruthChain Image Normalization Test</h1>
+    <p>This test verifies that the same image content produces the same hash regardless of format (JPEG, AVIF, PNG, etc.)</p>
+    
+    <div class="test-section">
+      <h2>Test Configuration</h2>
+      <label>
+        <strong>Unsplash URL:</strong><br>
+        <input type="text" id="urlInput" style="width: 100%; padding: 8px; margin-top: 5px;" 
+               value="https://plus.unsplash.com/premium_photo-1675865395171-4152ba93d11c?q=80&w=1625&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D">
+      </label>
+      <br><br>
+      <label>
+        <strong>Local AVIF File:</strong><br>
+        <input type="file" id="fileInput" accept="image/*">
+      </label>
+      <br><br>
+      <button id="runTest">Run Test</button>
+      <button id="clearResults">Clear Results</button>
+    </div>
+
+    <div id="results"></div>
+  </div>
+
+  <script>
+    // Same normalization function used in extension and frontend
+    async function normalizeImage(blob) {
+      if (!blob.type.startsWith('image/')) {
+        console.log('Skipping normalization for non-image blob:', blob.type);
+        return blob;
+      }
+      
+      console.log('Attempting to normalize image. Original type:', blob.type, 'size:', blob.size);
+      
+      try {
+        const imageUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        const imageLoadPromise = new Promise((resolve, reject) => {
+          img.onload = () => resolve(img);
+          img.onerror = (e) => {
+            console.error('Image loading error during normalization:', e);
+            reject(new Error(`Failed to load image for normalization. Type: ${blob.type}`));
+          };
+          img.src = imageUrl;
+        });
+        
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Image loading timed out for normalization')), 30000)
+        );
+        
+        const loadedImg = await Promise.race([imageLoadPromise, timeoutPromise]);
+        URL.revokeObjectURL(imageUrl);
+        
+        const canvas = document.createElement('canvas');
+        const naturalWidth = loadedImg.naturalWidth || loadedImg.width;
+        const naturalHeight = loadedImg.naturalHeight || loadedImg.height;
+        
+        if (!naturalWidth || !naturalHeight || naturalWidth <= 0 || naturalHeight <= 0) {
+          throw new Error(`Invalid image dimensions: ${naturalWidth}x${naturalHeight}`);
+        }
+        
+        canvas.width = naturalWidth;
+        canvas.height = naturalHeight;
+        
+        const ctx = canvas.getContext('2d', { 
+          willReadFrequently: false,
+          alpha: false,
+          desynchronized: false,
+          colorSpace: 'srgb'
+        });
+        
+        if (!ctx) {
+          throw new Error('Could not get 2D canvas context.');
+        }
+        
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.drawImage(loadedImg, 0, 0, canvas.width, canvas.height);
+        
+        const normalizedBlob = await new Promise((resolve) => {
+          canvas.toBlob((normalized) => {
+            if (!normalized) {
+              console.warn('Canvas toBlob returned null, using original blob for hashing.');
+              resolve(blob);
+              return;
+            }
+            const typedBlob = new Blob([normalized], { type: 'image/png' });
+            console.log('Image normalized successfully. Original dimensions:', loadedImg.naturalWidth, 'x', loadedImg.naturalHeight, 'Normalized dimensions:', canvas.width, 'x', canvas.height, {
+              originalType: blob.type,
+              originalSize: blob.size,
+              normalizedType: typedBlob.type,
+              normalizedSize: typedBlob.size
+            });
+            resolve(typedBlob);
+          }, 'image/png', 1.0);
+        });
+        
+        return normalizedBlob || blob;
+      } catch (error) {
+        console.warn('Failed to normalize image, using original blob for hashing. Error:', error.message);
+        if (blob.type === 'image/avif') {
+          console.warn('AVIF image normalization failed. This might be due to browser support or canvas limitations.');
+        }
+        return blob;
+      }
+    }
+
+    async function calculateHash(blob) {
+      console.log('Calculating hash for blob type:', blob.type, 'size:', blob.size);
+      const normalizedBlob = await normalizeImage(blob);
+      console.log('Normalized blob type:', normalizedBlob.type, 'size:', normalizedBlob.size, 'was normalized:', normalizedBlob !== blob);
+      const arrayBuffer = await normalizedBlob.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      console.log('Calculated hash:', hash);
+      return hash;
+    }
+
+    function addResult(message, type = 'info') {
+      const resultsDiv = document.getElementById('results');
+      const resultDiv = document.createElement('div');
+      resultDiv.className = `result ${type}`;
+      resultDiv.textContent = message;
+      resultsDiv.appendChild(resultDiv);
+      resultsDiv.scrollTop = resultsDiv.scrollHeight;
+    }
+
+    async function runTest() {
+      const urlInput = document.getElementById('urlInput');
+      const fileInput = document.getElementById('fileInput');
+      const runButton = document.getElementById('runTest');
+      
+      const url = urlInput.value.trim();
+      const file = fileInput.files[0];
+      
+      if (!url) {
+        addResult('❌ Please enter a URL', 'error');
+        return;
+      }
+      
+      if (!file) {
+        addResult('❌ Please select a local file', 'error');
+        return;
+      }
+      
+      runButton.disabled = true;
+      runButton.textContent = 'Testing...';
+      document.getElementById('results').innerHTML = '';
+      
+      addResult('🚀 Starting test...\n', 'info');
+      addResult(`📥 URL: ${url}\n📁 File: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(2)} KB)\n`, 'info');
+      
+      try {
+        // Test 1: Fetch and hash URL image
+        addResult('\n1️⃣ Fetching image from URL...', 'info');
+        const urlResponse = await fetch(url);
+        if (!urlResponse.ok) {
+          throw new Error(`Failed to fetch URL: ${urlResponse.status} ${urlResponse.statusText}`);
+        }
+        const urlBlob = await urlResponse.blob();
+        addResult(`   ✅ Fetched: ${urlBlob.type}, ${(urlBlob.size / 1024).toFixed(2)} KB`, 'info');
+        
+        addResult('   🔄 Normalizing URL image...', 'info');
+        // Get dimensions before normalization
+        const urlImg = new Image();
+        urlImg.src = URL.createObjectURL(urlBlob);
+        await new Promise((resolve) => { urlImg.onload = resolve; });
+        const urlDimensions = `${urlImg.naturalWidth}x${urlImg.naturalHeight}`;
+        URL.revokeObjectURL(urlImg.src);
+        addResult(`   📐 Dimensions: ${urlDimensions}`, 'info');
+        
+        const urlHash = await calculateHash(urlBlob);
+        addResult(`   ✅ URL Hash: ${urlHash}`, 'success');
+        
+        // Test 2: Hash local file
+        addResult('\n2️⃣ Processing local file...', 'info');
+        addResult(`   📁 File: ${file.name} (${file.type}, ${(file.size / 1024).toFixed(2)} KB)`, 'info');
+        
+        addResult('   🔄 Normalizing local file...', 'info');
+        // Get dimensions before normalization
+        const fileImg = new Image();
+        fileImg.src = URL.createObjectURL(file);
+        await new Promise((resolve) => { fileImg.onload = resolve; });
+        const fileDimensions = `${fileImg.naturalWidth}x${fileImg.naturalHeight}`;
+        URL.revokeObjectURL(fileImg.src);
+        addResult(`   📐 Dimensions: ${fileDimensions}`, 'info');
+        
+        const fileHash = await calculateHash(file);
+        addResult(`   ✅ File Hash: ${fileHash}`, 'success');
+        
+        // Compare
+        addResult('\n3️⃣ Comparing hashes...', 'info');
+        const match = urlHash === fileHash;
+        
+        const comparisonDiv = document.createElement('div');
+        comparisonDiv.className = 'hash-comparison';
+        comparisonDiv.innerHTML = `
+          <strong>Hash Comparison:</strong><br>
+          <div style="margin: 10px 0;">
+            <strong>URL Hash:</strong><br>
+            <code style="word-break: break-all;">${urlHash}</code>
+          </div>
+          <div style="margin: 10px 0;">
+            <strong>File Hash:</strong><br>
+            <code style="word-break: break-all;">${fileHash}</code>
+          </div>
+          <div style="margin-top: 15px; padding: 10px; background: ${match ? '#d1fae5' : '#fee2e2'}; border-radius: 4px;">
+            <span class="${match ? 'hash-match' : 'hash-mismatch'}">
+              ${match ? '✅ MATCH!' : '❌ NO MATCH'}
+            </span>
+          </div>
+          ${match ? 
+            '<p style="margin-top: 10px; color: #065f46;">✅ Success! The same image content produces the same hash regardless of format. Normalization is working correctly!</p>' :
+            '<p style="margin-top: 10px; color: #991b1b;">⚠️ The hashes do not match. This could mean:<br>' +
+            '• The images are actually different (different quality/compression)<br>' +
+            '• The URL serves a different image than the downloaded file<br>' +
+            '• Different dimensions (URL: ' + urlDimensions + ' vs File: ' + fileDimensions + ')<br>' +
+            '• Normalization needs further refinement</p>'
+          }
+        `;
+        document.getElementById('results').appendChild(comparisonDiv);
+        
+      } catch (error) {
+        addResult(`\n❌ Error: ${error.message}`, 'error');
+        console.error('Test error:', error);
+      } finally {
+        runButton.disabled = false;
+        runButton.textContent = 'Run Test';
+      }
+    }
+
+    document.getElementById('runTest').addEventListener('click', runTest);
+    document.getElementById('clearResults').addEventListener('click', () => {
+      document.getElementById('results').innerHTML = '';
+    });
+  </script>
+</body>
+</html>
+

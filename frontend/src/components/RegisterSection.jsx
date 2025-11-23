@@ -66,49 +66,86 @@ function RegisterSection() {
   const normalizeImage = async (blob) => {
     // Only normalize images, not videos
     if (!blob.type.startsWith('image/')) {
+      console.log('Skipping normalization for non-image blob:', blob.type)
       return blob
     }
+    
+    console.log('Attempting to normalize image. Original type:', blob.type, 'size:', blob.size)
     
     try {
       // Create image from blob
       const imageUrl = URL.createObjectURL(blob)
-      const img = await new Promise((resolve, reject) => {
-        const image = new Image()
-        image.onload = () => resolve(image)
-        image.onerror = reject
-        image.src = imageUrl
+      const img = new Image()
+      img.crossOrigin = 'anonymous' // Handle CORS for images
+      
+      const imageLoadPromise = new Promise((resolve, reject) => {
+        img.onload = () => resolve(img)
+        img.onerror = (e) => {
+          console.error('Image loading error during normalization:', e)
+          reject(new Error(`Failed to load image for normalization. Type: ${blob.type}`))
+        }
+        img.src = imageUrl
       })
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Image loading timed out for normalization')), 30000) // 30 seconds timeout
+      )
+      
+      const loadedImg = await Promise.race([imageLoadPromise, timeoutPromise])
+      
+      URL.revokeObjectURL(imageUrl) // Clean up object URL immediately
       
       // Create canvas and draw image (this strips metadata)
+      // Use natural dimensions for accurate size (not CSS-scaled dimensions)
       const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
+      const naturalWidth = loadedImg.naturalWidth || loadedImg.width
+      const naturalHeight = loadedImg.naturalHeight || loadedImg.height
+      
+      // Ensure valid dimensions
+      if (!naturalWidth || !naturalHeight || naturalWidth <= 0 || naturalHeight <= 0) {
+        throw new Error(`Invalid image dimensions: ${naturalWidth}x${naturalHeight}`)
+      }
+      
+      canvas.width = naturalWidth
+      canvas.height = naturalHeight
+      
+      // Use alpha: false to ensure consistent opaque output (no alpha channel differences)
       const ctx = canvas.getContext('2d', { 
         willReadFrequently: false,
-        alpha: true,
-        desynchronized: false
+        alpha: false, // No alpha channel for consistent hashing
+        desynchronized: false,
+        colorSpace: 'srgb' // Standard RGB color space
       })
       
-      // Clear canvas to ensure consistent background
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      if (!ctx) {
+        throw new Error('Could not get 2D canvas context.')
+      }
       
-      // Draw image (this strips all metadata)
-      ctx.drawImage(img, 0, 0)
+      // Set image smoothing to ensure consistent rendering
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      
+      // Fill with white background FIRST to ensure consistent opaque images
+      // This ensures images with transparency or different backgrounds normalize the same way
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      
+      // Draw image (this strips all metadata and normalizes format)
+      // Use exact dimensions to avoid any scaling artifacts
+      ctx.drawImage(loadedImg, 0, 0, canvas.width, canvas.height)
       
       // Convert back to blob (normalized, no metadata)
       // Always use PNG format for consistency - this ensures the same image always produces the same hash
-      // regardless of original format (JPEG, WebP, etc.)
+      // regardless of original format (JPEG, WebP, AVIF, etc.)
       const normalizedBlob = await new Promise((resolve) => {
         canvas.toBlob((normalized) => {
-          URL.revokeObjectURL(imageUrl)
           if (!normalized) {
-            console.warn('Canvas toBlob returned null, using original blob')
+            console.warn('Canvas toBlob returned null, using original blob for hashing.')
             resolve(blob)
             return
           }
-          // Ensure the blob has the correct type
           const typedBlob = new Blob([normalized], { type: 'image/png' })
-          console.log('Image normalized successfully:', {
+          console.log('Image normalized successfully. Original dimensions:', loadedImg.naturalWidth, 'x', loadedImg.naturalHeight, 'Normalized dimensions:', canvas.width, 'x', canvas.height, {
             originalType: blob.type,
             originalSize: blob.size,
             normalizedType: typedBlob.type,
@@ -120,7 +157,11 @@ function RegisterSection() {
       
       return normalizedBlob || blob // Fallback to original if normalization fails
     } catch (error) {
-      console.warn('Failed to normalize image, using original:', error)
+      console.warn('Failed to normalize image, using original blob for hashing. Error:', error.message)
+      // Special handling for AVIF if it's the source of the problem
+      if (blob.type === 'image/avif') {
+        console.warn('AVIF image normalization failed. This might be due to browser support or canvas limitations.')
+      }
       return blob // Fallback to original blob if normalization fails
     }
   }

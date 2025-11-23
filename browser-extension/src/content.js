@@ -102,8 +102,17 @@ function attachMediaHoverListeners(element) {
           }
         } else {
           // If no status yet, verify in background (will show badge on next hover)
-          verifyMedia(mediaUrl, false).catch(() => {
-            // Silently fail - badge will show on next hover if status is available
+          verifyMedia(mediaUrl, false).catch((error) => {
+            // Silently fail for context invalidation - it's expected when extension reloads
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            const isContextInvalidated = errorMsg.includes('Extension context invalidated') || 
+                                        errorMsg.includes('message port closed') ||
+                                        errorMsg.includes('Receiving end does not exist');
+            if (!isContextInvalidated) {
+              // Only log non-context-invalidation errors
+              console.warn('Background verification failed:', error);
+            }
+            // Badge will show on next hover if status is available
           });
         }
       }
@@ -410,9 +419,21 @@ try {
       // Loading badges are now hover-based, not shown immediately
   
       // Try to fetch the media - handle CORS issues
+      // Use Accept headers to request the same format the browser would download
+      // This ensures we get the same image quality/format as a browser download
+      const fetchOptions = {
+        headers: {
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache'
+        },
+        mode: 'cors',
+        credentials: 'omit'
+      };
+      
       let response;
       try {
-        response = await fetch(mediaUrl);
+        response = await fetch(mediaUrl, fetchOptions);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -421,7 +442,8 @@ try {
         console.warn('Direct fetch failed, trying backend proxy:', fetchError);
         try {
           const proxyUrl = `https://truthchain-drow.onrender.com/v1/proxy?url=${encodeURIComponent(mediaUrl)}`;
-          response = await fetch(proxyUrl);
+          // Proxy should forward Accept headers, but we'll also try without them
+          response = await fetch(proxyUrl, fetchOptions);
           if (!response.ok) {
             throw new Error(`Proxy fetch failed: HTTP ${response.status}`);
           }
@@ -485,21 +507,29 @@ try {
         }
       }
   
-      // Cache verified hashes
-      if (result.status === 'verified') {
-        verifiedHashes.add(hash);
+      // Cache verified hashes (with error handling for context invalidation)
+      try {
+        if (result.status === 'verified') {
+          verifiedHashes.add(hash);
+        }
+        mediaStatus.set(mediaUrl, { ...result, hash });
+        updateOverlayStatus(mediaUrl);
+        updateSidebarWithResult(mediaUrl, { ...result, hash });
+        
+        if (isAuto) {
+          processedAutoHashes.add(hash);
+        }
+      } catch (cacheError) {
+        // If context is invalidated, operations might fail - that's okay
+        const cacheErrorMsg = cacheError instanceof Error ? cacheError.message : String(cacheError);
+        if (!cacheErrorMsg.includes('Extension context invalidated') && 
+            !cacheErrorMsg.includes('message port closed')) {
+          console.warn('Error updating cache/status:', cacheError);
+        }
       }
-
-      mediaStatus.set(mediaUrl, { ...result, hash });
-      updateOverlayStatus(mediaUrl);
-      updateSidebarWithResult(mediaUrl, { ...result, hash });
       
       // Don't show badge immediately - it will show on hover
       // Badges are now hover-based, not permanent
-      
-      if (isAuto) {
-        processedAutoHashes.add(hash);
-      }
       
       return result;
   
@@ -509,19 +539,34 @@ try {
                                     errorMsg.includes('message port closed') ||
                                     errorMsg.includes('Receiving end does not exist');
       
+      // Handle context invalidation gracefully - don't log as error, it's expected
       if (isContextInvalidated) {
-        console.warn('Extension context invalidated during verification. Please reload the page.');
-        mediaStatus.set(mediaUrl, { 
+        // Silently handle context invalidation - don't log or update UI
+        // The user will need to reload the page, but we don't want to spam console
+        return { 
           status: 'error', 
-          message: 'Extension context invalidated. Please reload the page to continue using TruthChain.' 
-        });
-      } else {
-        console.error('Verification error:', error);
-        mediaStatus.set(mediaUrl, { status: 'error', message: errorMsg });
+          message: 'Extension context invalidated. Please reload the page.' 
+        };
       }
       
-      updateOverlayStatus(mediaUrl);
-      updateSidebarWithResult(mediaUrl, error instanceof Error ? error : new Error(errorMsg));
+      // For other errors, log and update status
+      console.error('Verification error:', error);
+      try {
+        mediaStatus.set(mediaUrl, { status: 'error', message: errorMsg });
+        updateOverlayStatus(mediaUrl);
+        updateSidebarWithResult(mediaUrl, error instanceof Error ? error : new Error(errorMsg));
+      } catch (updateError) {
+        // If context is invalidated during error handling, just return error
+        const updateErrorMsg = updateError instanceof Error ? updateError.message : String(updateError);
+        if (updateErrorMsg.includes('Extension context invalidated') || 
+            updateErrorMsg.includes('message port closed')) {
+          return { 
+            status: 'error', 
+            message: 'Extension context invalidated. Please reload the page.' 
+          };
+        }
+      }
+      
       // Don't show error badge immediately - it will show on hover if needed
       // Badges are now hover-based, not permanent
       
@@ -634,26 +679,69 @@ try {
       const imageUrl = URL.createObjectURL(blob);
       const img = await new Promise((resolve, reject) => {
         const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = reject;
+        const timeout = setTimeout(() => {
+          reject(new Error('Image load timeout'));
+        }, 30000); // 30 second timeout for large images
+        image.onload = () => {
+          clearTimeout(timeout);
+          resolve(image);
+        };
+        image.onerror = (error) => {
+          clearTimeout(timeout);
+          console.warn('Image load error:', error, 'Type:', blob.type);
+          // For AVIF and other modern formats, try without crossOrigin first
+          if (blob.type === 'image/avif' || blob.type.includes('avif')) {
+            // AVIF should work without crossOrigin for blob URLs
+            reject(new Error(`Failed to load ${blob.type} image. Browser may not support this format.`));
+            return;
+          }
+          // Try with crossOrigin for CORS issues (for other formats)
+          image.crossOrigin = 'anonymous';
+          image.src = imageUrl;
+          // If still fails, reject
+          image.onerror = () => reject(new Error(`Failed to load image: ${blob.type}`));
+        };
         image.src = imageUrl;
       });
       
       // Create canvas and draw image (this strips metadata)
+      // Use natural dimensions for accurate size (not CSS-scaled dimensions)
       const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
+      const naturalWidth = img.naturalWidth || img.width;
+      const naturalHeight = img.naturalHeight || img.height;
+      
+      // Ensure valid dimensions
+      if (!naturalWidth || !naturalHeight || naturalWidth <= 0 || naturalHeight <= 0) {
+        throw new Error(`Invalid image dimensions: ${naturalWidth}x${naturalHeight}`);
+      }
+      
+      canvas.width = naturalWidth;
+      canvas.height = naturalHeight;
+      
+      // Use alpha: false to ensure consistent opaque output (no alpha channel differences)
       const ctx = canvas.getContext('2d', { 
         willReadFrequently: false,
-        alpha: true,
-        desynchronized: false
+        alpha: false, // No alpha channel for consistent hashing
+        desynchronized: false,
+        colorSpace: 'srgb' // Standard RGB color space
       });
       
-      // Clear canvas to ensure consistent background
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!ctx) {
+        throw new Error('Could not get 2D canvas context');
+      }
       
-      // Draw image (this strips all metadata)
-      ctx.drawImage(img, 0, 0);
+      // Set image smoothing to ensure consistent rendering
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      
+      // Fill with white background FIRST to ensure consistent opaque images
+      // This ensures images with transparency or different backgrounds normalize the same way
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw image (this strips all metadata and normalizes format)
+      // Use exact dimensions to avoid any scaling artifacts
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       
       // Convert back to blob (normalized, no metadata)
       // Always use PNG format for consistency - this ensures the same image always produces the same hash
@@ -668,7 +756,7 @@ try {
           }
           // Ensure the blob has the correct type
           const typedBlob = new Blob([normalized], { type: 'image/png' });
-          console.log('Image normalized successfully:', {
+          console.log('Image normalized successfully. Original dimensions:', img.naturalWidth || img.width, 'x', img.naturalHeight || img.height, 'Normalized dimensions:', canvas.width, 'x', canvas.height, {
             originalType: blob.type,
             originalSize: blob.size,
             normalizedType: typedBlob.type,
@@ -680,7 +768,11 @@ try {
       
       return normalizedBlob || blob; // Fallback to original if normalization fails
     } catch (error) {
-      console.warn('Failed to normalize image, using original:', error);
+      console.warn('Failed to normalize image, using original blob for hashing. Error:', error.message);
+      // Special handling for AVIF if it's the source of the problem
+      if (blob.type === 'image/avif') {
+        console.warn('AVIF image normalization failed. This might be due to browser support or canvas limitations.');
+      }
       return blob; // Fallback to original blob if normalization fails
     }
   }
@@ -1124,17 +1216,26 @@ function hideHoverOverlay(elementOrUrl) {
 }
 
 function updateOverlayStatus(mediaUrl) {
-  const overlayData = hoverOverlays.get(mediaUrl);
-  if (!overlayData) return;
-  // Update dropdown based on new status
-  const status = mediaStatus.get(mediaUrl);
-  const isVerified = status && status.status === 'verified';
-  const registerOption = overlayData.dropdown.querySelector('.truthchain-dropdown-option:last-child');
-  if (registerOption && registerOption.textContent.includes('Register')) {
-    if (isVerified) {
-      registerOption.style.display = 'none';
-    } else {
-      registerOption.style.display = 'flex';
+  try {
+    const overlayData = hoverOverlays.get(mediaUrl);
+    if (!overlayData) return;
+    // Update dropdown based on new status
+    const status = mediaStatus.get(mediaUrl);
+    const isVerified = status && status.status === 'verified';
+    const registerOption = overlayData.dropdown.querySelector('.truthchain-dropdown-option:last-child');
+    if (registerOption && registerOption.textContent.includes('Register')) {
+      if (isVerified) {
+        registerOption.style.display = 'none';
+      } else {
+        registerOption.style.display = 'flex';
+      }
+    }
+  } catch (error) {
+    // Silently handle errors (context invalidation, DOM changes, etc.)
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (!errorMsg.includes('Extension context invalidated') && 
+        !errorMsg.includes('message port closed')) {
+      console.warn('Error updating overlay status:', error);
     }
   }
 }
@@ -1259,8 +1360,46 @@ function renderSidebarState(mediaUrl, { state, result, message }) {
     successMessage.className = 'truthchain-sidebar-status';
     successMessage.style.color = '#10B981';
     successMessage.style.marginTop = '12px';
-    successMessage.textContent = 'Your media has been registered on Sui blockchain. Verifying...';
+    successMessage.textContent = 'Your media has been registered on Sui blockchain.';
     sidebarContent.appendChild(successMessage);
+
+    // Add "Verify Registration" button
+    const verifyButton = document.createElement('button');
+    verifyButton.className = 'truthchain-sidebar-button primary';
+    verifyButton.style.marginTop = '16px';
+    verifyButton.style.width = '100%';
+    verifyButton.textContent = 'Verify Registration';
+    verifyButton.addEventListener('click', async () => {
+      verifyButton.disabled = true;
+      verifyButton.textContent = 'Verifying...';
+      try {
+        const verifyResult = await verifyMedia(mediaUrl, false);
+        if (verifyResult) {
+          mediaStatus.set(mediaUrl, verifyResult);
+          updateOverlayStatus(mediaUrl);
+          renderSidebarState(mediaUrl, { state: 'result', result: verifyResult });
+        } else {
+          verifyButton.disabled = false;
+          verifyButton.textContent = 'Verify Registration';
+          const errorMsg = document.createElement('div');
+          errorMsg.className = 'truthchain-sidebar-status';
+          errorMsg.style.color = '#EF4444';
+          errorMsg.style.marginTop = '8px';
+          errorMsg.textContent = 'Verification failed. Please try again.';
+          sidebarContent.appendChild(errorMsg);
+        }
+      } catch (error) {
+        verifyButton.disabled = false;
+        verifyButton.textContent = 'Verify Registration';
+        const errorMsg = document.createElement('div');
+        errorMsg.className = 'truthchain-sidebar-status';
+        errorMsg.style.color = '#EF4444';
+        errorMsg.style.marginTop = '8px';
+        errorMsg.textContent = error.message || 'Verification failed. Please try again.';
+        sidebarContent.appendChild(errorMsg);
+      }
+    });
+    sidebarContent.appendChild(verifyButton);
 
     if (result) {
       const metaList = document.createElement('div');
@@ -1424,29 +1563,13 @@ async function registerMediaFromSidebar(mediaUrl) {
         state: 'registration-success', 
         result: registrationResult 
       });
-      
-      // After a short delay, verify and update to show verified status
-      setTimeout(async () => {
-        const verifyResult = await verifyMedia(mediaUrl, false);
-        if (verifyResult) {
-          mediaStatus.set(mediaUrl, verifyResult);
-          updateOverlayStatus(mediaUrl);
-          renderSidebarState(mediaUrl, { state: 'result', result: verifyResult });
-        }
-      }, 1000);
+      // Don't automatically verify - let user click "Retry Verification" button
     } else {
-      // If registration didn't return success, try to verify anyway
-      const verifyResult = await verifyMedia(mediaUrl, false);
-      if (verifyResult && verifyResult.status === 'verified') {
-        mediaStatus.set(mediaUrl, verifyResult);
-        updateOverlayStatus(mediaUrl);
-        renderSidebarState(mediaUrl, { state: 'result', result: verifyResult });
-      } else {
-        renderSidebarState(mediaUrl, {
-          state: 'error',
-          message: registrationResult?.error || 'Registration completed but verification unavailable. Please try again.'
-        });
-      }
+      // If registration didn't return success, show error
+      renderSidebarState(mediaUrl, {
+        state: 'error',
+        message: registrationResult?.error || 'Registration failed. Please try again.'
+      });
     }
   } catch (error) {
     console.error('Sidebar registration error:', error);
@@ -1458,12 +1581,21 @@ async function registerMediaFromSidebar(mediaUrl) {
 }
 
 function updateSidebarWithResult(mediaUrl, result) {
-  if (!sidebarActiveMediaUrl || sidebarActiveMediaUrl !== mediaUrl) return;
-  if (result instanceof Error) {
-    renderSidebarState(mediaUrl, { state: 'error', message: result.message });
-    return;
+  try {
+    if (!sidebarActiveMediaUrl || sidebarActiveMediaUrl !== mediaUrl) return;
+    if (result instanceof Error) {
+      renderSidebarState(mediaUrl, { state: 'error', message: result.message });
+      return;
+    }
+    renderSidebarState(mediaUrl, { state: 'result', result });
+  } catch (error) {
+    // Silently handle errors (context invalidation, DOM changes, etc.)
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (!errorMsg.includes('Extension context invalidated') && 
+        !errorMsg.includes('message port closed')) {
+      console.warn('Error updating sidebar:', error);
+    }
   }
-  renderSidebarState(mediaUrl, { state: 'result', result });
 }
 
   
@@ -1673,9 +1805,21 @@ async function registerMedia(mediaUrl, options = {}) {
     // Loading badges are now hover-based, not shown immediately
   
       // Try to fetch the media - handle CORS issues
+      // Use Accept headers to request the same format the browser would download
+      // This ensures we get the same image quality/format as a browser download
+      const fetchOptions = {
+        headers: {
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache'
+        },
+        mode: 'cors',
+        credentials: 'omit'
+      };
+      
       let response;
       try {
-        response = await fetch(mediaUrl);
+        response = await fetch(mediaUrl, fetchOptions);
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -1684,7 +1828,8 @@ async function registerMedia(mediaUrl, options = {}) {
         console.warn('Direct fetch failed, trying backend proxy:', fetchError);
         try {
           const proxyUrl = `https://truthchain-drow.onrender.com/v1/proxy?url=${encodeURIComponent(mediaUrl)}`;
-          response = await fetch(proxyUrl);
+          // Proxy should forward Accept headers, but we'll also try without them
+          response = await fetch(proxyUrl, fetchOptions);
           if (!response.ok) {
             throw new Error(`Proxy fetch failed: HTTP ${response.status}`);
           }
@@ -1717,11 +1862,11 @@ async function registerMedia(mediaUrl, options = {}) {
       });
   
     if (result.success) {
-      // Store status - badge will show on hover
-      mediaStatus.set(mediaUrl, { status: 'verified', ...result });
-      // Mark as verified so it won't be auto-verified again
-      verifiedMediaUrls.add(mediaUrl);
-      // Allow auto-verification to run again to show updated state
+      // Store registration status (not verified yet - user needs to verify manually)
+      mediaStatus.set(mediaUrl, { status: 'registered', ...result });
+      // Don't mark as verified - user needs to verify manually
+      // Don't add to verifiedMediaUrls - let verification happen when user clicks button
+      // Clear any cached verification so fresh verification can happen
       processedAutoHashes.delete(hash);
       verifiedHashes.delete(hash);
       
