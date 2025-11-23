@@ -658,7 +658,7 @@ function showHoverOverlay(element) {
     const saveText = document.createElement('span');
     saveText.className = 'truthchain-save-text';
     saveText.textContent = 'Save';
-    saveText.style.display = 'none';
+    saveText.style.display = 'inline-block';
     
     const arrow = document.createElement('span');
     arrow.className = 'truthchain-dropdown-arrow';
@@ -678,7 +678,7 @@ function showHoverOverlay(element) {
     
     const verifyOption = document.createElement('div');
     verifyOption.className = 'truthchain-dropdown-option';
-    verifyOption.innerHTML = '<span class="truthchain-dropdown-icon">🔍</span> Verify';
+    verifyOption.innerHTML = '<span class="truthchain-dropdown-icon">✓</span><span>Verify Authenticity</span>';
     verifyOption.addEventListener('click', (e) => {
       e.stopPropagation();
       verifyMedia(mediaUrl);
@@ -687,7 +687,7 @@ function showHoverOverlay(element) {
     
     const registerOption = document.createElement('div');
     registerOption.className = 'truthchain-dropdown-option';
-    registerOption.innerHTML = '<span class="truthchain-dropdown-icon">📝</span> Register';
+    registerOption.innerHTML = '<span class="truthchain-dropdown-icon">+</span><span>Register on TruthChain</span>';
     registerOption.addEventListener('click', (e) => {
       e.stopPropagation();
       registerMedia(mediaUrl, { showBadge: false });
@@ -1377,10 +1377,10 @@ async function registerMedia(mediaUrl, options = {}) {
       badge.style.visibility = 'visible';
     }
     
-    // Padding from image edges
-    const padding = 8;
+    // Padding from image edges (Pinterest-style: 12px from top, 12px from right)
+    const padding = isHoverOverlay ? 12 : 8;
     
-    // Calculate position within image bounds (top-right corner)
+    // Calculate position within image bounds (top-right corner for Pinterest-style)
     // Start with preferred position (top-right of image)
     let top = elementRect.top + padding;
     let left = elementRect.right - badgeWidth - padding;
