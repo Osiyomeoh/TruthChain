@@ -123,7 +123,19 @@ cp .env.example .env
 npm run dev
 ```
 
-3. **Browser Extension Setup**
+3. **Frontend Setup**
+```bash
+cd frontend
+npm install
+cp .env.example .env  # If exists, or create .env
+# Edit .env with:
+# VITE_API_BASE_URL=https://truthchain-drow.onrender.com/v1
+# VITE_SUI_NETWORK=testnet
+npm run dev
+# Frontend runs on http://localhost:5174
+```
+
+4. **Browser Extension Setup**
 ```bash
 cd browser-extension
 # Load unpacked extension in Chrome:
@@ -131,9 +143,10 @@ cd browser-extension
 # 2. Enable "Developer mode"
 # 3. Click "Load unpacked"
 # 4. Select the browser-extension folder
+# OR download from: https://truthchain-drow.onrender.com/v1/extension/download
 ```
 
-4. **Smart Contract Deployment** (Optional - for local testing)
+5. **Smart Contract Deployment** (Required for registration)
 ```bash
 cd smart-contracts/truthchain_attestation
 sui move build
@@ -142,51 +155,105 @@ sui client publish --gas-budget 100000000
 
 ### Environment Variables
 
-Create a `.env` file in the `backend` directory:
-
+**Backend** (`.env` in `backend/` directory):
 ```env
 # Walrus Configuration
-WALRUS_PUBLISHER_URL=https://publisher.walrus.testnet.sui.io
-WALRUS_AGGREGATOR_URL=https://aggregator.walrus.testnet.sui.io
+WALRUS_PUBLISHER_URL=https://publisher.walrus-testnet.walrus.space
+WALRUS_AGGREGATOR_URL=https://aggregator.walrus-testnet.walrus.space
 
 # Sui Configuration
 SUI_RPC_URL=https://fullnode.testnet.sui.io:443
-PACKAGE_ID=0x...
-REGISTRY_OBJECT_ID=0x...
-SUI_PRIVATE_KEY=suiprivkey1...
+PACKAGE_ID=0x...  # From contract deployment
+REGISTRY_OBJECT_ID=0x...  # From contract deployment
+SUI_PRIVATE_KEY=suiprivkey1...  # For backend-initiated transactions
 
 # Server
 PORT=3000
 ```
 
+**Frontend** (`.env` in `frontend/` directory):
+```env
+VITE_API_BASE_URL=https://truthchain-drow.onrender.com/v1
+VITE_SUI_NETWORK=testnet
+VITE_KEEP_ALIVE_INTERVAL=10
+```
+
+**Extension**: No environment file needed - API URL is hardcoded in `src/background.js`
+
 ## 📖 How It Works
+
+### Image Normalization
+
+All images are normalized before hashing to ensure consistent verification:
+- Images are re-encoded through Canvas API
+- Metadata (EXIF, etc.) is stripped
+- All images converted to PNG format
+- White background fill for transparency
+- Same image content always produces same hash, regardless of original format
 
 ### Registration Flow
 
-1. User right-clicks an image/video → "Register with TruthChain"
-2. Extension calculates SHA-256 hash of media content
-3. Backend generates **Seal proof** (Merkle tree) for integrity
-4. Metadata + Seal proof uploaded to **Walrus** as blob
-5. On-chain attestation created on **Sui blockchain**
-6. Attestation indexed in **Nautilus** for fast querying
-7. Badge appears showing "Registered ✓"
+**Extension**:
+1. User hovers over image → TruthChain badge appears
+2. User clicks badge → Sidebar opens
+3. User clicks "Register" → Extension fetches image
+4. Image normalized → SHA-256 hash calculated
+5. Hash + metadata sent to backend API
+6. Backend processes (see Backend Flow below)
+7. Sidebar shows success with transaction hash
+
+**Frontend**:
+1. User uploads file
+2. File normalized → Hash calculated
+3. User selects registration method (Backend or Wallet)
+4. If Wallet: User connects Sui wallet and signs transaction
+5. Registration processed → Success message with details
+
+**Backend**:
+1. Receives hash + metadata
+2. AI detection analysis
+3. Similarity check (prevents duplicates)
+4. Seal proof generation (Merkle tree)
+5. Upload to Walrus (metadata + proof)
+6. Create Sui transaction (`register_media`)
+7. Index in Nautilus
+8. Return attestation ID + transaction hash
 
 ### Verification Flow
 
-1. Extension auto-scans page for media (or manual right-click)
-2. Calculates hash of each image/video
-3. Queries **Sui blockchain** for attestation
-4. If found, retrieves Seal proof from **Walrus**
-5. Verifies integrity using Seal proof
-6. Updates verification count in **Nautilus** index
-7. Badge shows "Verified ✓" or "Unknown"
+**Extension**:
+1. User hovers over image → Badge appears
+2. Extension fetches image with Accept headers
+3. Image normalized → Hash calculated
+4. Hash sent to backend API
+5. Backend queries Sui blockchain
+6. If found: Badge shows "Verified ✓"
+7. If not found: Badge shows "Unknown"
+8. Click badge → Sidebar with details
+
+**Frontend**:
+1. User uploads file
+2. File normalized → Hash calculated
+3. Hash sent to backend API
+4. Backend queries Sui blockchain
+5. Result displayed with attestation details
+6. Fallback: If normalized hash fails, tries non-normalized hash
+
+**Backend**:
+1. Receives hash
+2. Query Sui blockchain for attestation
+3. If found: Retrieve from Walrus
+4. Verify Seal proof
+5. Update verification count in Nautilus
+6. Return attestation details
 
 ### Search & Analytics Flow
 
-1. Query **Nautilus** index for attestations
-2. Filter by creator, source, date, media type
-3. Get real-time statistics and analytics
+1. Query **Nautilus** index via `/v1/search`
+2. Filter by creator, source, date, media type, AI status
+3. Get real-time statistics via `/v1/stats`
 4. Track verification trends and top creators
+5. View creator reputation scores
 
 ## 🎬 Demo
 
@@ -315,12 +382,251 @@ MIT License - see LICENSE file for details
 
 Built with ❤️ for the Walrus Haulout Hackathon
 
+## 📍 Contract Addresses & Deployment
+
+### Smart Contracts (Sui Testnet)
+
+**Package ID**: Set `PACKAGE_ID` in backend `.env` file  
+**Registry Object ID**: Set `REGISTRY_OBJECT_ID` in backend `.env` file
+
+To get these values after deployment:
+1. Deploy the smart contract (see `smart-contracts/DEPLOY.md`)
+2. Copy the `packageId` from deployment output
+3. Copy the `registryObjectId` from the `AttestationRegistry` object
+4. Add them to your backend `.env` file
+
+### Deployment URLs
+
+**Backend API (Production)**: `https://truthchain-drow.onrender.com`  
+**Frontend (Production)**: Configure in `frontend/.env` with `VITE_API_BASE_URL`  
+**Extension API**: Configured in `browser-extension/src/background.js`
+
+### Network Configuration
+
+- **Sui Network**: Testnet (`https://fullnode.testnet.sui.io:443`)
+- **Walrus Publisher**: `https://publisher.walrus-testnet.walrus.space`
+- **Walrus Aggregator**: `https://aggregator.walrus-testnet.walrus.space`
+
+## 🔄 Complete Workflow
+
+### Browser Extension Flow
+
+#### Installation
+1. Download extension ZIP from backend `/v1/extension/download` or clone repository
+2. Extract and load in Chrome via `chrome://extensions/` (Developer mode)
+3. Extension automatically connects to production API
+
+#### Verification Flow (Extension)
+1. **Media Detection**: Extension scans page for `<img>` and `<video>` elements
+2. **Hover Detection**: When user hovers over media, extension shows TruthChain badge
+3. **Hash Calculation**: 
+   - Fetches image/video via `fetch()` with Accept headers
+   - Normalizes image to PNG format (strips metadata)
+   - Calculates SHA-256 hash of normalized content
+4. **Verification Request**: Sends hash to backend via `POST /v1/verify`
+5. **Result Display**: 
+   - ✅ Verified: Green badge with checkmark
+   - ❌ Unknown: Gray badge
+   - ⚠️ Error: Red badge with retry option
+6. **Sidebar**: Click badge to open sidebar with detailed verification info
+
+#### Registration Flow (Extension)
+1. **User Action**: Right-click media → "Register with TruthChain" or click badge → "Register"
+2. **Hash Calculation**: Same normalization and hashing as verification
+3. **Registration Request**: Sends hash + metadata to backend via `POST /v1/register`
+4. **Backend Processing**:
+   - Generates Seal proof (Merkle tree)
+   - Uploads metadata + proof to Walrus
+   - Creates on-chain attestation on Sui
+   - Indexes in Nautilus
+5. **Success Display**: Sidebar shows registration success with transaction hash
+6. **Manual Verification**: User can click "Verify Registration" button to verify
+
+### Frontend Flow
+
+#### Setup
+1. **Install Dependencies**: `cd frontend && npm install`
+2. **Environment Variables**: Create `frontend/.env`:
+   ```env
+   VITE_API_BASE_URL=https://truthchain-drow.onrender.com/v1
+   VITE_SUI_NETWORK=testnet
+   VITE_KEEP_ALIVE_INTERVAL=10
+   ```
+3. **Run Development**: `npm run dev` (runs on `http://localhost:5174`)
+
+#### Registration Flow (Frontend)
+1. **File Upload**: User selects image/video file
+2. **Method Selection**: 
+   - **Backend Method**: Backend handles blockchain transaction
+   - **Wallet Method**: User's Sui wallet signs transaction (requires wallet connection)
+3. **Hash Calculation**: 
+   - Normalizes image to PNG (strips metadata)
+   - Calculates SHA-256 hash
+4. **Metadata Extraction**: Extracts width, height, format, size
+5. **AI Detection**: Backend automatically detects AI-generated content
+6. **Registration**:
+   - **Backend Method**: 
+     - Uploads to Walrus
+     - Backend creates Sui transaction
+     - Indexes in Nautilus
+   - **Wallet Method**:
+     - Uploads to Walrus
+     - User signs transaction with Sui wallet
+     - Indexes in Nautilus
+7. **Success Display**: Shows transaction hash, Walrus blob ID, and verification link
+
+#### Verification Flow (Frontend)
+1. **File Upload**: User selects image/video file
+2. **Hash Calculation**: Same normalization and hashing process
+3. **Verification Request**: Sends hash to backend via `POST /v1/verify`
+4. **Result Display**: 
+   - ✅ Verified: Shows attestation details, creator, timestamp
+   - ❌ Not Verified: Shows message to register media
+5. **Fallback Verification**: If normalized hash fails, tries non-normalized hash (for images registered before normalization)
+
+### Backend Flow
+
+#### Registration Endpoint (`POST /v1/register`)
+1. **Input Validation**: Validates hash (64 chars), source, mediaType
+2. **Security Checks**:
+   - AI Detection: Analyzes metadata for AI-generated content
+   - Similarity Detection: Checks for similar images already registered
+   - Reputation Check: Validates creator reputation
+3. **Seal Proof Generation**: Creates Merkle tree proof for data integrity
+4. **Walrus Upload**: Uploads metadata + Seal proof as blob
+5. **Blockchain Transaction**: 
+   - Creates Sui transaction with `register_media` function
+   - Includes: hash, walrus_blob_id, source, media_type, is_ai_generated
+   - Emits `AttestationCreated` event
+6. **Nautilus Indexing**: Indexes attestation for fast search
+7. **Response**: Returns attestation ID, transaction hash, Walrus blob ID
+
+#### Verification Endpoint (`POST /v1/verify`)
+1. **Hash Lookup**: Queries Sui blockchain for attestation by hash
+2. **Attestation Retrieval**: Fetches attestation object from Sui
+3. **Walrus Retrieval**: Fetches metadata + Seal proof from Walrus
+4. **Proof Verification**: Verifies Seal proof integrity
+5. **Update Count**: Increments verification count in Nautilus
+6. **Response**: Returns verification status, attestation details, creator info
+
+## 🔌 Complete API Reference
+
+### Core Endpoints
+
+**Base URL**: `https://truthchain-drow.onrender.com/v1` (Production) or `http://localhost:3000/v1` (Development)
+
+#### `POST /v1/register`
+Register new media attestation
+
+**Request Body**:
+```json
+{
+  "hash": "64-character-hex-string",
+  "source": "example.com",
+  "mediaType": "photo",
+  "isAiGenerated": false,
+  "metadata": "{\"width\": 1920, \"height\": 1080}",
+  "skipBlockchain": false,
+  "creator": "0x...",
+  "imageMetadata": {
+    "width": 1920,
+    "height": 1080,
+    "format": "image/jpeg",
+    "size": 123456
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "attestationId": "0x...",
+  "transactionHash": "0x...",
+  "walrusBlobId": "FY-72_RfZby6TkHIitCf4EBWkqepsZn4Io_HHvDrfhg",
+  "verificationUrl": "https://verify.truthchain.io/{hash}",
+  "aiDetection": {
+    "isAiGenerated": false,
+    "confidence": 15
+  }
+}
+```
+
+#### `POST /v1/verify`
+Verify media hash
+
+**Request Body**:
+```json
+{
+  "hash": "64-character-hex-string"
+}
+```
+
+**Response**:
+```json
+{
+  "status": "verified",
+  "attestation": {
+    "id": "0x...",
+    "creator": "0x...",
+    "source": "example.com",
+    "mediaType": "photo",
+    "createdAt": 1234567890,
+    "verificationCount": 42
+  }
+}
+```
+
+#### `GET /v1/config`
+Get backend configuration (contract addresses, network)
+
+**Response**:
+```json
+{
+  "packageId": "0x...",
+  "registryObjectId": "0x...",
+  "suiRpcUrl": "https://fullnode.testnet.sui.io:443",
+  "network": "testnet"
+}
+```
+
+#### `GET /v1/proxy?url={encoded_url}`
+Proxy endpoint for fetching media (bypasses CORS)
+
+#### `GET /v1/extension/download`
+Download packaged browser extension as ZIP
+
+### Search & Analytics Endpoints
+
+#### `GET /v1/search`
+Search attestations with filters
+
+**Query Parameters**:
+- `creator`: Creator address
+- `source`: Source domain
+- `dateFrom`: Start date (ISO 8601)
+- `dateTo`: End date (ISO 8601)
+- `mediaType`: `photo`, `video`, `document`, `audio`
+- `isAiGenerated`: `true` or `false`
+
+#### `GET /v1/stats`
+Get verification statistics
+
+#### `GET /v1/creator/:creator`
+Get all attestations by creator address
+
+#### `GET /v1/reputation/:creator`
+Get creator reputation score
+
+#### `GET /v1/health`
+Health check endpoint
+
 ## 🔗 Links
 
-- **Demo**: [Link to demo video]
-- **GitHub**: [Your repo URL]
-- **Sui Explorer**: [Your contract address]
-- **Walrus**: [Your blob examples]
+- **GitHub Repository**: `https://github.com/Osiyomeoh/TruthChain`
+- **Backend API**: `https://truthchain-drow.onrender.com`
+- **Sui Explorer**: View transactions at `https://suiexplorer.com/?network=testnet`
+- **Extension Download**: `https://truthchain-drow.onrender.com/v1/extension/download`
 
 ---
 
