@@ -15,7 +15,6 @@ function Footer() {
             <ul>
               <li><a href="https://sui.io" target="_blank" rel="noopener noreferrer">Sui Blockchain</a></li>
               <li><a href="https://walrus.xyz" target="_blank" rel="noopener noreferrer">Walrus Storage</a></li>
-              <li><a href="https://nautilus.xyz" target="_blank" rel="noopener noreferrer">Nautilus Search</a></li>
             </ul>
           </div>
           <div className="footer-section">

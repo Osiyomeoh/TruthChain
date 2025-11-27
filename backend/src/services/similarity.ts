@@ -70,8 +70,8 @@ export async function findSimilarImages(
   threshold: number = 85 // 85% similarity threshold
 ): Promise<SimilarImage[]> {
   // In production, this would query a database or index
-  // For now, return empty array (to be implemented with Nautilus or database)
-  // TODO: Implement actual similarity search using Nautilus or dedicated index
+  // For now, return empty array (to be implemented with indexing service or database)
+  // TODO: Implement actual similarity search using indexing service or dedicated index
   
   return [];
 }

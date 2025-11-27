@@ -4,7 +4,10 @@ import {
   verifyMedia, 
   searchAttestations,
   getVerificationStats,
-  getAttestationsByCreator
+  getAttestationsByCreator,
+  getEncryptedMetadata,
+  prepareDecryptionTransaction,
+  executeDecryption
 } from './controllers/attestation';
 import { getCreatorReputation } from './services/reputation';
 import { packageExtension } from './services/extensionPackage';
@@ -14,10 +17,15 @@ export function registerRoutes(app: Express) {
   app.post('/v1/register', registerMedia);
   app.post('/v1/verify', verifyMedia);
   
-  // Nautilus search endpoints
+  // Search and analytics endpoints
   app.get('/v1/search', searchAttestations);
   app.get('/v1/stats', getVerificationStats);
   app.get('/v1/creator/:creator', getAttestationsByCreator);
+  
+  // Decryption endpoints
+  app.post('/v1/decrypt/metadata', getEncryptedMetadata);
+  app.post('/v1/decrypt/prepare', prepareDecryptionTransaction);
+  app.post('/v1/decrypt/execute', executeDecryption);
   
   // Reputation endpoint
   app.get('/v1/reputation/:address', (req, res) => {
@@ -49,10 +57,29 @@ export function registerRoutes(app: Express) {
   // Config endpoint for frontend
   app.get('/v1/config', (req, res) => {
     res.json({
-      packageId: process.env.PACKAGE_ID || '',
-      registryObjectId: process.env.REGISTRY_OBJECT_ID || '',
+      packageId: process.env.TRUTHCHAIN_PACKAGE_ID || process.env.PACKAGE_ID || '',
+      registryObjectId: process.env.TRUTHCHAIN_REGISTRY_OBJECT_ID || process.env.REGISTRY_OBJECT_ID || '',
       suiRpcUrl: process.env.SUI_RPC_URL || 'https://fullnode.testnet.sui.io:443',
       network: process.env.SUI_RPC_URL?.includes('testnet') ? 'testnet' : 'mainnet'
+    });
+  });
+
+  // Seal status endpoint for debugging
+  app.get('/v1/seal/status', (req, res) => {
+    const { isSealEnabled, getSealConfig } = require('./services/seal');
+    const sealConfig = getSealConfig();
+    res.json({
+      enabled: sealConfig.enabled,
+      configured: !!(sealConfig.packageId && sealConfig.keyServers && sealConfig.keyServers.length > 0),
+      packageId: sealConfig.packageId ? `${sealConfig.packageId.substring(0, 20)}...` : null,
+      keyServers: sealConfig.keyServers?.length || 0,
+      threshold: sealConfig.threshold,
+      env: {
+        SEAL_ENABLED: process.env.SEAL_ENABLED || 'NOT SET',
+        SEAL_PACKAGE_ID: process.env.SEAL_PACKAGE_ID ? 'SET' : 'NOT SET',
+        SEAL_KEY_SERVERS: process.env.SEAL_KEY_SERVERS ? 'SET' : 'NOT SET',
+        SEAL_THRESHOLD: process.env.SEAL_THRESHOLD || 'NOT SET',
+      }
     });
   });
   
@@ -114,7 +141,7 @@ export function registerRoutes(app: Express) {
       name: 'TruthChain API',
       version: '1.0.0',
       network: process.env.SUI_NETWORK || 'testnet',
-      technologies: ['Walrus', 'Nautilus', 'Sui'],
+      technologies: ['Walrus', 'Sui'],
       endpoints: {
         register: 'POST /v1/register',
         verify: 'POST /v1/verify',

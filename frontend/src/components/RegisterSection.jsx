@@ -1,12 +1,25 @@
 import React, { useState, useEffect } from 'react'
-import { useCurrentWallet, useSignAndExecuteTransaction } from '@mysten/dapp-kit'
+import { useCurrentWallet, useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit'
 import { registerMediaWithWallet } from '../utils/walletRegistration'
 import { API_BASE } from '../config/api'
 import './RegisterSection.css'
 import './Button.css'
 
 function RegisterSection() {
-  const { isConnected, address } = useCurrentWallet()
+  const { isConnected } = useCurrentWallet()
+  const currentAccount = useCurrentAccount()
+  // Get address from currentAccount (more reliable than useCurrentWallet's address)
+  const address = currentAccount?.address
+  
+  // Debug: Log wallet connection status
+  useEffect(() => {
+    console.log('[FRONTEND] Wallet status:', {
+      isConnected,
+      hasAccount: !!currentAccount,
+      address: address || 'NOT AVAILABLE',
+      addressLength: address?.length || 0
+    });
+  }, [isConnected, currentAccount, address]);
   const { mutate: signAndExecuteTransaction, isPending: isSigning } = useSignAndExecuteTransaction()
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
@@ -241,22 +254,44 @@ function RegisterSection() {
       if (useWallet && isConnected) {
         // Wallet-based registration
         try {
+          console.log('\n🔐 [FRONTEND] Wallet Registration - Seal Check:');
+          console.log(`   📋 [FRONTEND] Wallet connected: ${isConnected}`);
+          console.log(`   📋 [FRONTEND] Current account:`, currentAccount);
+          console.log(`   📋 [FRONTEND] Wallet address: ${address || 'NOT AVAILABLE'}`);
+          console.log(`   📋 [FRONTEND] Creator address will be sent: ${address ? 'YES' : 'NO'}`);
+          
+          if (!address) {
+            console.warn('   ⚠️ [FRONTEND] WARNING: Wallet is connected but address is not available!');
+            console.warn('   💡 [FRONTEND] This will prevent Seal encryption from being used.');
+          }
+          
+          // Prepare request body
+          const requestBody = {
+            hash,
+            source: metadata.source || 'Web Interface',
+            mediaType: metadata.mediaType,
+            isAiGenerated: metadata.isAiGenerated,
+            metadata: fileMetadata,
+            skipBlockchain: true, // Tell backend to skip blockchain, we'll do it with wallet
+            creator: address || undefined, // Include creator address for Seal encryption
+            imageMetadata: imageMetadata || undefined // Include image metadata for similarity detection
+          };
+          
+          console.log('   📤 [FRONTEND] Request body being sent:');
+          console.log(`      - hash: ${requestBody.hash.substring(0, 16)}...`);
+          console.log(`      - creator: ${requestBody.creator || 'undefined'}`);
+          console.log(`      - skipBlockchain: ${requestBody.skipBlockchain}`);
+          console.log(`   🌐 [FRONTEND] API URL: ${API_BASE}/register`);
+          console.log(`   📋 [FRONTEND] Full request URL: ${API_BASE}/register`);
+          
           // First, upload to Walrus via backend (we still need this for storage)
+          console.log(`   ⏳ [FRONTEND] Sending request to backend...`);
           const walrusResponse = await fetch(`${API_BASE}/register`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              hash,
-              source: metadata.source || 'Web Interface',
-              mediaType: metadata.mediaType,
-              isAiGenerated: metadata.isAiGenerated,
-              metadata: fileMetadata,
-              skipBlockchain: true, // Tell backend to skip blockchain, we'll do it with wallet
-              creator: address || undefined, // Include creator address for reputation check
-              imageMetadata: imageMetadata || undefined // Include image metadata for similarity detection
-            })
+            body: JSON.stringify(requestBody)
           })
 
           if (!walrusResponse.ok) {
@@ -265,6 +300,48 @@ function RegisterSection() {
           }
 
           const walrusData = await walrusResponse.json()
+          
+          // Log Seal encryption info from Walrus upload
+          console.log('\n🔐 Seal Encryption Status (Wallet Registration):')
+          console.log('   📋 [FRONTEND] Checking backend response for Seal encryption...')
+          console.log('   📋 [FRONTEND] Response keys:', Object.keys(walrusData))
+          console.log('   📋 [FRONTEND] sealEncryption:', walrusData.sealEncryption)
+          console.log('   📋 [FRONTEND] sealEncryptionStatus:', walrusData.sealEncryptionStatus)
+          console.log('   📋 [FRONTEND] sealProof present:', !!walrusData.sealProof)
+          
+          if (walrusData.sealEncryption) {
+            console.log('   ✅ Seal encryption was used!')
+            console.log('\n   📋 Seal Encryption Details:')
+            console.log(`      🔐 Algorithm: BonehFranklinBLS12381 + AES-256-GCM`)
+            console.log(`      🆔 Identity (encrypted for): ${walrusData.sealEncryption.identity}`)
+            console.log(`      📦 Encrypted object: ${walrusData.sealEncryption.encryptedObject.length} chars (base64)`)
+            console.log(`      🔑 Session key: ${walrusData.sealEncryption.sessionKey.length} chars (base64)`)
+            console.log(`      💾 Total storage: ${walrusData.sealEncryption.encryptedObject.length + walrusData.sealEncryption.sessionKey.length} chars (base64)`)
+            console.log(`      📊 Encrypted object (first 50 chars): ${walrusData.sealEncryption.encryptedObject.substring(0, 50)}...`)
+            console.log(`      📊 Session key (first 50 chars): ${walrusData.sealEncryption.sessionKey.substring(0, 50)}...`)
+            console.log('      💾 Encrypted metadata stored in Walrus')
+            console.log('      🔓 Only you (the creator) can decrypt this data using your wallet')
+            console.log('      📝 What this means: Your sensitive metadata (source URL, custom data) is encrypted')
+            console.log('      🔒 Security: Uses threshold secret sharing with multiple key servers')
+          } else {
+            console.log('   ⏭️ Seal encryption not used')
+            console.log(`   📋 Status: ${walrusData.sealEncryptionStatus || 'unknown'}`)
+            if (walrusData.sealEncryptionStatus === 'disabled') {
+              console.log('   💡 Seal is disabled in backend')
+              console.log('      Check: SEAL_ENABLED=true in backend .env and restart backend')
+            } else if (walrusData.sealEncryptionStatus === 'no_creator') {
+              console.log('   💡 Creator address not received by backend')
+              console.log('      Check: Backend logs to see if creator address is being received')
+            } else if (walrusData.sealEncryptionStatus === 'failed') {
+              console.log('   💡 Seal encryption failed')
+              console.log('      Check: Backend logs for error details')
+            }
+            console.log('   📋 Check backend server logs for detailed Seal status')
+            console.log('   📋 Or visit: http://localhost:3000/v1/seal/status (if backend is local)')
+          }
+          if (walrusData.sealProof) {
+            console.log(`   📝 Seal proof: ${walrusData.sealProof.algorithm || 'hash-based'}`)
+          }
 
           // Now register on-chain with wallet
           if (!config || !config.packageId || !config.registryObjectId) {
@@ -329,7 +406,9 @@ function RegisterSection() {
                     txDigest: result.digest,
                     creator: creator || address || '',
                     walrus_blob_id: walrusData.walrus_blob_id || walrusData.blobId,
-                    method: 'wallet'
+                    method: 'wallet',
+                    sealEncryption: walrusData.sealEncryption, // Include Seal encryption info
+                    sealProof: walrusData.sealProof // Include Seal proof
                   })
                   resolve()
                 },
@@ -369,21 +448,35 @@ function RegisterSection() {
         }
       } else {
         // Backend-based registration (simpler, no wallet needed)
-                const response = await fetch(`${API_BASE}/register`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    hash,
-                    source: metadata.source || 'Web Interface',
-                    mediaType: metadata.mediaType,
-                    isAiGenerated: metadata.isAiGenerated,
-                    metadata: fileMetadata,
-                    creator: address || undefined, // Include creator address for reputation check
-                    imageMetadata: imageMetadata || undefined // Include image metadata for similarity detection
-                  })
-                })
+        console.log('\n🔐 [FRONTEND] Backend Registration - Seal Check:');
+        console.log(`   📋 [FRONTEND] Wallet connected: ${isConnected}`);
+        console.log(`   📋 [FRONTEND] Wallet address: ${address || 'NOT AVAILABLE'}`);
+        console.log(`   📋 [FRONTEND] Creator address will be sent: ${address ? 'YES' : 'NO'}`);
+        
+        const requestBody = {
+          hash,
+          source: metadata.source || 'Web Interface',
+          mediaType: metadata.mediaType,
+          isAiGenerated: metadata.isAiGenerated,
+          metadata: fileMetadata,
+          creator: address || undefined, // Include creator address for Seal encryption
+          imageMetadata: imageMetadata || undefined // Include image metadata for similarity detection
+        };
+        
+        console.log('   📤 [FRONTEND] Request body being sent:');
+        console.log(`      - hash: ${requestBody.hash.substring(0, 16)}...`);
+        console.log(`      - creator: ${requestBody.creator || 'undefined'}`);
+        console.log(`   🌐 [FRONTEND] API URL: ${API_BASE}/register`);
+        console.log(`   📋 [FRONTEND] Full request URL: ${API_BASE}/register`);
+        
+        console.log(`   ⏳ [FRONTEND] Sending request to backend...`);
+        const response = await fetch(`${API_BASE}/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody)
+        })
 
         if (!response.ok) {
           const errorData = await response.json()
@@ -391,6 +484,48 @@ function RegisterSection() {
         }
 
                 const data = await response.json()
+                
+                // Log Seal encryption info
+                console.log('\n🔐 Seal Encryption Status (Backend Registration):')
+                console.log('   📋 [FRONTEND] Checking backend response for Seal encryption...')
+                console.log('   📋 [FRONTEND] Response keys:', Object.keys(data))
+                console.log('   📋 [FRONTEND] sealEncryption:', data.sealEncryption)
+                console.log('   📋 [FRONTEND] sealEncryptionStatus:', data.sealEncryptionStatus)
+                console.log('   📋 [FRONTEND] sealProof present:', !!data.sealProof)
+                
+                if (data.sealEncryption) {
+                  console.log('   ✅ Seal encryption was used!')
+                  console.log('\n   📋 Seal Encryption Details:')
+                  console.log(`      🔐 Algorithm: BonehFranklinBLS12381 + AES-256-GCM`)
+                  console.log(`      🆔 Identity (encrypted for): ${data.sealEncryption.identity}`)
+                  console.log(`      📦 Encrypted object: ${data.sealEncryption.encryptedObject.length} chars (base64)`)
+                  console.log(`      🔑 Session key: ${data.sealEncryption.sessionKey.length} chars (base64)`)
+                  console.log(`      💾 Total storage: ${data.sealEncryption.encryptedObject.length + data.sealEncryption.sessionKey.length} chars (base64)`)
+                  console.log(`      📊 Encrypted object (first 50 chars): ${data.sealEncryption.encryptedObject.substring(0, 50)}...`)
+                  console.log(`      📊 Session key (first 50 chars): ${data.sealEncryption.sessionKey.substring(0, 50)}...`)
+                  console.log('      💾 Encrypted metadata stored in Walrus')
+                  console.log('      🔓 Only you (the creator) can decrypt this data using your wallet')
+                  console.log('      📝 What this means: Your sensitive metadata (source URL, custom data) is encrypted')
+                  console.log('      🔒 Security: Uses threshold secret sharing with multiple key servers')
+                } else {
+                  console.log('   ⏭️ Seal encryption not used')
+                  console.log(`   📋 Status: ${data.sealEncryptionStatus || 'unknown'}`)
+                  if (data.sealEncryptionStatus === 'disabled') {
+                    console.log('   💡 Seal is disabled in backend')
+                    console.log('      Check: SEAL_ENABLED=true in backend .env and restart backend')
+                  } else if (data.sealEncryptionStatus === 'no_creator') {
+                    console.log('   💡 Creator address not received by backend')
+                    console.log('      Check: Backend logs to see if creator address is being received')
+                    console.log('      Tip: Connect your wallet to enable Seal encryption')
+                  } else if (data.sealEncryptionStatus === 'failed') {
+                    console.log('   💡 Seal encryption failed')
+                    console.log('      Check: Backend logs for error details')
+                  }
+                  console.log('   📋 Check backend server logs for detailed Seal status')
+                }
+                if (data.sealProof) {
+                  console.log(`   📝 Seal proof: ${data.sealProof.algorithm || 'hash-based'}`)
+                }
                 
                 // Show security warnings if any
                 if (data.securityWarnings && data.securityWarnings.length > 0) {
@@ -652,6 +787,34 @@ function RegisterSection() {
                 )}
                 {result.walrus_blob_id && (
                   <p><strong>Walrus Blob:</strong> <code>{result.walrus_blob_id.slice(0, 20)}...</code></p>
+                )}
+                {result.sealEncryption && (
+                  <div style={{
+                    marginTop: 'var(--spacing-md)',
+                    padding: 'var(--spacing-md)',
+                    background: 'rgba(14, 165, 233, 0.1)',
+                    border: '1px solid var(--color-primary)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--color-text-primary)'
+                  }}>
+                    <strong style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      🔐 Seal Encryption Active
+                    </strong>
+                    <p style={{ marginTop: 'var(--spacing-xs)', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                      Sensitive metadata encrypted with identity-based encryption
+                    </p>
+                    <p style={{ marginTop: 'var(--spacing-xs)', fontSize: '12px', color: 'var(--color-text-tertiary)' }}>
+                      Identity: <code>{result.sealEncryption.identity?.slice(0, 10)}...{result.sealEncryption.identity?.slice(-6)}</code>
+                    </p>
+                    <p style={{ marginTop: 'var(--spacing-xs)', fontSize: '12px', color: 'var(--color-text-tertiary)' }}>
+                      Encrypted object: {result.sealEncryption.encryptedObject?.length || 0} chars • Session key: {result.sealEncryption.sessionKey?.length || 0} chars
+                    </p>
+                  </div>
+                )}
+                {result.sealProof && (
+                  <p style={{ marginTop: 'var(--spacing-sm)', fontSize: '12px', color: 'var(--color-text-tertiary)' }}>
+                    <strong>Seal Proof:</strong> {result.sealProof.algorithm || 'hash-based'}
+                  </p>
                 )}
               </div>
             </div>

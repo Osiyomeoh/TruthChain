@@ -4,6 +4,7 @@ import Header from './components/Header'
 import Hero from './components/Hero'
 import RegisterSection from './components/RegisterSection'
 import VerifySection from './components/VerifySection'
+import DecryptSection from './components/DecryptSection'
 import ExtensionSection from './components/ExtensionSection'
 import FeaturesSection from './components/FeaturesSection'
 import Footer from './components/Footer'
@@ -54,6 +55,7 @@ function App() {
         <FeaturesSection />
         <RegisterSection />
         <VerifySection />
+        <DecryptSection />
         <ExtensionSection />
       </main>
       <Footer />

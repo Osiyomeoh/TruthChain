@@ -18,6 +18,15 @@ const getApiBaseUrl = () => {
 
 export const API_BASE = getApiBaseUrl();
 
+// Log API configuration on import (only in dev mode)
+if (import.meta.env.DEV) {
+  console.log('🌐 [FRONTEND] API Configuration:');
+  console.log(`   📋 VITE_API_BASE_URL: ${import.meta.env.VITE_API_BASE_URL || 'NOT SET'}`);
+  console.log(`   📋 Build mode: ${import.meta.env.PROD ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+  console.log(`   📋 API_BASE: ${API_BASE}`);
+  console.log(`   📋 Will use: ${API_BASE}`);
+}
+
 // Sui Network configuration
 export const SUI_NETWORK = import.meta.env.VITE_SUI_NETWORK || 'testnet';
 

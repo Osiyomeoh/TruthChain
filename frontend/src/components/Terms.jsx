@@ -31,7 +31,7 @@ function Terms() {
               <li>Access verification services through our web interface and browser extension</li>
             </ul>
             <p>
-              The Service utilizes Sui blockchain, Walrus storage, and Nautilus search technologies to provide 
+              The Service utilizes Sui blockchain and Walrus storage technologies to provide 
               decentralized, immutable media verification.
             </p>
           </section>

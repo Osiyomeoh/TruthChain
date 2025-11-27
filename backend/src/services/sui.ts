@@ -6,7 +6,7 @@ import { decodeSuiPrivateKey } from '@mysten/sui.js/cryptography';
 
 let suiClient: SuiClient | null = null;
 
-function getSuiClient(): SuiClient {
+export function getSuiClient(): SuiClient {
   if (!suiClient) {
     const RPC_URL = process.env.SUI_RPC_URL || getFullnodeUrl('testnet');
     suiClient = new SuiClient({ url: RPC_URL });
@@ -15,17 +15,19 @@ function getSuiClient(): SuiClient {
 }
 
 function getRegistryObjectId(): string {
-  const REGISTRY_OBJECT_ID = process.env.REGISTRY_OBJECT_ID;
+  // Check for new package first, fallback to old one for backward compatibility
+  const REGISTRY_OBJECT_ID = process.env.TRUTHCHAIN_REGISTRY_OBJECT_ID || process.env.REGISTRY_OBJECT_ID;
   if (!REGISTRY_OBJECT_ID) {
-    throw new Error('REGISTRY_OBJECT_ID environment variable is required');
+    throw new Error('REGISTRY_OBJECT_ID or TRUTHCHAIN_REGISTRY_OBJECT_ID environment variable is required');
   }
   return REGISTRY_OBJECT_ID;
 }
 
 function getPackageId(): string {
-  const PACKAGE_ID = process.env.PACKAGE_ID;
+  // Check for new package first, fallback to old one for backward compatibility
+  const PACKAGE_ID = process.env.TRUTHCHAIN_PACKAGE_ID || process.env.PACKAGE_ID;
   if (!PACKAGE_ID) {
-    throw new Error('PACKAGE_ID environment variable is required');
+    throw new Error('PACKAGE_ID or TRUTHCHAIN_PACKAGE_ID environment variable is required');
   }
   return PACKAGE_ID;
 }

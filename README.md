@@ -1,6 +1,6 @@
 # TruthChain - Provably Authentic Media Verification
 
-> **A decentralized media authenticity platform using Walrus, Nautilus, and Sui blockchain**
+> **A decentralized media authenticity platform using Walrus and Sui blockchain**
 
 [![License: Non-Commercial](https://img.shields.io/badge/License-Non--Commercial-red.svg)](LICENSE)
 [![Built for Walrus Haulout Hackathon](https://img.shields.io/badge/Hackathon-Walrus%20Haulout-blue)](https://haulout.devpost.com)
@@ -16,8 +16,8 @@ TruthChain is a **decentralized media authenticity platform** that **instantly v
 
 Both interfaces leverage:
 - **🦭 Walrus**: Decentralized blob storage for media metadata
-- **🔍 Nautilus**: Fast indexing and search for attestations
 - **⛓️ Sui Blockchain**: Immutable on-chain attestation registry
+- **🔍 Indexing Service**: Fast search and analytics for attestations
 
 ## 🎯 Problem Statement
 
@@ -34,6 +34,8 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 - **Media Registration**: Upload and register images/videos with detailed metadata
 - **Media Verification**: Upload files to verify authenticity
 - **Wallet Integration**: Connect Sui wallet for direct blockchain transactions
+- **Seal Encryption**: Automatic encryption of sensitive metadata when wallet is connected
+- **Encrypted Metadata Viewing**: Decrypt and view your encrypted sensitive metadata
 - **Detailed Results**: View attestation details, creator info, timestamps, and transaction hashes
 - **AI Detection**: Automatic detection of AI-generated content
 - **Terms & Conditions**: Complete legal framework for platform usage
@@ -54,8 +56,8 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ### 🔐 **Decentralized Architecture**
 - **Walrus**: Stores media metadata as blobs
-- **Nautilus**: Indexes attestations for fast search and analytics
 - **Sui**: On-chain attestation registry for immutable verification
+- **Indexing Service**: Fast search and analytics for attestations
 
 ### 🔍 **Advanced Search & Analytics**
 - Search attestations by creator, source, date, media type
@@ -102,9 +104,10 @@ Both interfaces work together to provide comprehensive media authenticity verifi
              │                │
              ▼                ▼
       ┌──────────────┐
-      │  Nautilus   │
-      │  (Indexing  │
-      │   & Search) │
+      │   Indexing  │
+      │   Service   │
+      │  (Search &  │
+      │  Analytics) │
       └──────────────┘
 ```
 
@@ -126,7 +129,8 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 - Node.js + Express
 - TypeScript
 - Walrus SDK integration
-- Nautilus indexing service
+- Seal SDK for identity-based encryption (optional)
+- Custom indexing service for search and analytics
 - Sui SDK for blockchain interactions
 
 **Smart Contracts:**
@@ -177,10 +181,66 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ---
 
-### 3. **Nautilus** 🔍
+### 3. **Seal** 🔒 (Backend + Frontend - Optional)
 
 **What it does:**
-- Fast indexing and querying infrastructure for Sui data
+- Decentralized secrets management (DSM) for identity-based encryption
+- Encrypts sensitive data before storing on Walrus
+- Access controlled by on-chain policies on Sui
+- Threshold secret sharing for enhanced security
+- Enables creators to decrypt and view their encrypted metadata
+
+**How it's used:**
+
+**Backend:**
+- **Encryption**: Encrypts sensitive metadata (source URLs, custom metadata) using creator's identity
+- **Identity-Based**: Data encrypted for specific Sui addresses (creators)
+- **Walrus Integration**: Encrypted data stored on Walrus alongside unencrypted hash
+- **Access Control**: Decryption requires proper session keys and on-chain approval
+- **Automatic**: Encrypts automatically when creator address is provided during registration
+- **Optional**: Falls back to hash-based proofs if Seal is not configured or no creator address provided
+
+**Frontend:**
+- **Encryption Status**: Shows Seal encryption status in registration results
+- **Encrypted Metadata Viewing**: Decrypt and view encrypted sensitive metadata
+- **Identity Verification**: Only the creator (the address that encrypted the data) can decrypt
+- **User Interface**: Dedicated "View Encrypted Metadata" section for decryption
+
+**Implementation:**
+- `backend/src/services/seal.ts` - Seal SDK integration for encryption/decryption
+- `backend/src/controllers/attestation.ts` - Encryption during registration, decryption endpoints
+- `frontend/src/components/DecryptSection.jsx` - Frontend UI for viewing encrypted metadata
+- Uses `@mysten/seal` package for encryption/decryption
+- Encrypts sensitive metadata during registration if `SEAL_ENABLED=true` and creator address provided
+- Stores encrypted object and session key in Walrus metadata
+- Backend endpoints: `/v1/decrypt/metadata`, `/v1/decrypt/prepare`, `/v1/decrypt/execute`
+- Backward compatible with hash-based proofs
+
+**Configuration:**
+- `SEAL_ENABLED` - Enable/disable Seal encryption
+- `SEAL_PACKAGE_ID` - Seal smart contract package ID (Testnet: `0x927a54e9ae803f82ebf480136a9bcff45101ccbe28b13f433c89f5181069d682`)
+- `SEAL_KEY_SERVERS` - Key server configurations (format: `objectId:weight:apiKeyName:apiKey`)
+- `SEAL_THRESHOLD` - Threshold for secret sharing (requires at least this many key servers)
+
+**Key Servers:**
+- Seal relies on a committee of key servers to generate threshold-based decryption keys
+- **Testnet Package ID**: `0x927a54e9ae803f82ebf480136a9bcff45101ccbe28b13f433c89f5181069d682`
+- **Mainnet Package ID**: `0xa212c4c6c7183b911d0be8768f4cb1df7a383025b5d0ba0c014009f0f30f5f8d`
+- Use verified key servers for Testnet (see Seal documentation)
+- For permissioned servers, contact the provider to allowlist your access policy package ID
+- Key servers can operate in **Open mode** (any package) or **Permissioned mode** (allowlisted packages)
+- Each key server must be registered on-chain using `seal::key_server::create_and_transfer_v1`
+- Key server object ID is required in `SEAL_KEY_SERVERS` configuration
+- See [Seal Key Server Operations](https://seal-docs.wal.app/key-server-operations/) for details
+
+**Note:** Seal is optional. If not configured, TruthChain uses hash-based integrity proofs.
+
+---
+
+### 4. **Indexing Service** 🔍
+
+**What it does:**
+- Fast indexing and querying for attestation data
 - Enables search by creator, source, date, media type
 - Provides analytics and statistics
 
@@ -191,15 +251,15 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 - **Statistics**: Tracks total attestations, verifications, top creators, top sources
 
 **Implementation:**
-- `NautilusIndexer` class in `backend/src/services/nautilus.ts`
-- In-memory indexes (can be replaced with actual Nautilus API)
+- `IndexingService` class in `backend/src/services/indexing.ts` (custom indexing service)
+- In-memory indexes for fast queries
 - `indexAttestation()`: Adds attestation to all relevant indexes
 - `search()`: Queries indexes with filters
 - `getStats()`: Returns verification statistics
 
 ---
 
-### 5. **React + Vite** ⚛️ (Frontend Only)
+### 6. **React + Vite** ⚛️ (Frontend Only)
 
 **What it does:**
 - React provides component-based UI framework
@@ -222,7 +282,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ---
 
-### 6. **@mysten/dapp-kit** 🔐 (Frontend Only)
+### 7. **@mysten/dapp-kit** 🔐 (Frontend Only)
 
 **What it does:**
 - Sui wallet integration library for React
@@ -244,7 +304,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ---
 
-### 7. **Node.js + Express + TypeScript** 🚀
+### 8. **Node.js + Express + TypeScript** 🚀
 
 **What it does:**
 - Node.js provides JavaScript runtime for backend
@@ -265,7 +325,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ---
 
-### 8. **Zod** ✅
+### 9. **Zod** ✅
 
 **What it does:**
 - TypeScript-first schema validation library
@@ -283,7 +343,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ---
 
-### 9. **Chrome Extension API** 🌐 (Extension Only)
+### 10. **Chrome Extension API** 🌐 (Extension Only)
 
 **What it does:**
 - Browser extension platform for Chrome/Edge
@@ -308,7 +368,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ---
 
-### 10. **Canvas API** 🎨 (Extension + Frontend)
+### 11. **Canvas API** 🎨 (Extension + Frontend)
 
 **What it does:**
 - Browser API for image manipulation and rendering
@@ -334,7 +394,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ---
 
-### 11. **SHA-256** 🔐 (Extension + Frontend + Backend)
+### 12. **SHA-256** 🔐 (Extension + Frontend + Backend)
 
 **What it does:**
 - Cryptographic hash function
@@ -365,7 +425,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 
 ---
 
-### 12. **Archiver** 📦
+### 13. **Archiver** 📦
 
 **What it does:**
 - Node.js library for creating ZIP archives
@@ -392,7 +452,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 4. Backend: Zod validates request
 5. Backend: Walrus stores metadata as blob → Returns blob ID
 6. Backend: Sui SDK creates on-chain transaction → Stores attestation
-7. Backend: Nautilus indexes attestation for search
+7. Backend: Indexing service indexes attestation for search
 8. Response: Returns attestation ID, transaction hash, blob ID to extension
 
 **Via Frontend:**
@@ -401,7 +461,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 3. Frontend: User selects registration method (Backend or Wallet)
 4. If Backend: Sends hash + metadata to backend API (same as extension flow)
 5. If Wallet: User connects wallet → Frontend builds transaction → User signs → Backend indexes
-6. Backend: Zod validates → Walrus upload → Sui transaction → Nautilus index
+6. Backend: Zod validates → Walrus upload → Sui transaction → Indexing service
 7. Response: Returns attestation ID, transaction hash, blob ID to frontend
 
 ### Verification Process:
@@ -411,7 +471,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 2. Extension: Sends hash to backend API
 3. Backend: Sui SDK queries blockchain for attestation by hash
 4. Backend: Retrieves blob from Walrus using blob ID
-5. Backend: Updates Nautilus verification count
+5. Backend: Updates indexing service verification count
 6. Response: Returns verification status and attestation details to extension
 7. Extension: Displays badge with verification status
 
@@ -421,7 +481,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 3. Frontend: Sends hash to backend API
 4. Backend: Sui SDK queries blockchain for attestation by hash
 5. Backend: Retrieves blob from Walrus using blob ID
-6. Backend: Updates Nautilus verification count
+6. Backend: Updates indexing service verification count
 7. Response: Returns verification status and attestation details to frontend
 8. Frontend: Displays verification result with attestation details
 
@@ -441,7 +501,7 @@ Both interfaces work together to provide comprehensive media authenticity verifi
 - More detailed UI with metadata display
 - Can connect Sui wallet for direct transactions
 
-This architecture provides **decentralization** (Sui), **efficient storage** (Walrus), **fast queries** (Nautilus), and **user-friendly interfaces** (React frontend + Chrome extension).
+This architecture provides **decentralization** (Sui), **efficient storage** (Walrus), **fast queries** (Indexing Service), and **user-friendly interfaces** (React frontend + Chrome extension).
 
 ## 🚀 Quick Start
 
@@ -513,6 +573,28 @@ PACKAGE_ID=0x...  # From contract deployment
 REGISTRY_OBJECT_ID=0x...  # From contract deployment
 SUI_PRIVATE_KEY=suiprivkey1...  # For backend-initiated transactions
 
+# Seal Configuration (Optional - for identity-based encryption)
+# Seal enables encryption of sensitive metadata before storing on Walrus
+# See https://seal-docs.wal.app/ for setup instructions
+SEAL_ENABLED=false  # Set to 'true' to enable Seal encryption
+SEAL_PACKAGE_ID=0x927a54e9ae803f82ebf480136a9bcff45101ccbe28b13f433c89f5181069d682  # Testnet Seal package ID
+# SEAL_PACKAGE_ID=0xa212c4c6c7183b911d0be8768f4cb1df7a383025b5d0ba0c014009f0f30f5f8d  # Mainnet Seal package ID
+SEAL_THRESHOLD=2  # Threshold for threshold secret sharing (default: 2, requires at least 2 key servers)
+# Key Server Configuration Format: objectId:weight:apiKeyName:apiKey
+# - objectId: The on-chain KeyServer object ID (from seal::key_server::create_and_transfer_v1)
+#   To register a key server: sui client call --function create_and_transfer_v1 --module key_server 
+#   --package <SEAL_PACKAGE_ID> --args <SERVER_NAME> https://<YOUR_URL> 0 <MASTER_PUBKEY>
+# - weight: Server weight (typically 1)
+# - apiKeyName: Optional API key header name (if key server requires authentication)
+# - apiKey: Optional API key value
+# Example: SEAL_KEY_SERVERS=0xabc123...:1:api_key:secret123,0xdef456...:1
+# Note: Use verified key servers for Testnet. For permissioned servers, contact the provider
+#       to allowlist your access policy package ID. See https://seal-docs.wal.app/ for details.
+#       Key servers can run in Open mode (any package) or Permissioned mode (allowlisted packages).
+SEAL_KEY_SERVERS=0x...:1:api_key_name:api_key_value
+SEAL_VERIFY_KEY_SERVERS=true  # Verify key server authenticity (default: true)
+SEAL_TIMEOUT=30000  # Timeout in milliseconds (default: 30000)
+
 # Server
 PORT=3000
 ```
@@ -525,6 +607,15 @@ VITE_KEEP_ALIVE_INTERVAL=10
 ```
 
 **Extension**: No environment file needed - API URL is hardcoded in `src/background.js`
+
+### Seal Key Server Setup
+
+For detailed instructions on setting up Seal key servers, see [SEAL_SETUP.md](backend/SEAL_SETUP.md).
+
+**Quick options:**
+1. **Use existing Testnet key servers** - Check Seal documentation or community for verified key servers
+2. **Run your own key server** - See Seal documentation for key server operations
+3. **Skip Seal** - TruthChain works perfectly without Seal (uses hash-based proofs by default)
 
 ## 📖 How It Works
 
@@ -553,16 +644,26 @@ All images are normalized before hashing to ensure consistent verification:
 2. File normalized → Hash calculated
 3. User selects registration method (Backend or Wallet)
 4. If Wallet: User connects Sui wallet and signs transaction
-5. Registration processed → Success message with details
+5. **Seal Encryption** (if wallet connected):
+   - Creator address sent to backend
+   - Backend encrypts sensitive metadata using Seal
+   - Encryption status shown in registration result
+6. Registration processed → Success message with details
+7. **View Encrypted Metadata** (optional):
+   - User can enter Walrus blob ID
+   - Decrypt and view encrypted sensitive metadata
 
 **Backend**:
-1. Receives hash + metadata
+1. Receives hash + metadata + creator address (if wallet connected)
 2. AI detection analysis
 3. Similarity check (prevents duplicates)
-4. Upload to Walrus (metadata)
-5. Create Sui transaction (`register_media`)
-6. Index in Nautilus
-7. Return attestation ID + transaction hash
+4. **Seal Encryption** (if enabled and creator address provided):
+   - Encrypts sensitive metadata (source URL, custom metadata) using creator's identity
+   - Stores encrypted object and session key in Walrus metadata
+5. Upload to Walrus (metadata, including encrypted data if Seal was used)
+6. Create Sui transaction (`register_media`)
+7. Index in indexing service
+8. Return attestation ID + transaction hash + Seal encryption status
 
 ### Verification Flow
 
@@ -588,12 +689,37 @@ All images are normalized before hashing to ensure consistent verification:
 1. Receives hash
 2. Query Sui blockchain for attestation
 3. If found: Retrieve from Walrus
-4. Update verification count in Nautilus
+4. Update verification count in indexing service
 5. Return attestation details
+
+### Decryption Flow (View Encrypted Metadata)
+
+**Frontend:**
+1. User enters Walrus blob ID from registration result
+2. Frontend fetches encrypted metadata from backend (`/v1/decrypt/metadata`)
+3. Backend retrieves blob from Walrus and extracts encrypted data
+4. Frontend verifies identity matches (only creator can decrypt)
+5. User clicks "Decrypt with Wallet"
+6. Backend prepares decryption transaction (`/v1/decrypt/prepare`)
+7. Backend executes decryption (`/v1/decrypt/execute`)
+8. Frontend displays decrypted sensitive metadata (source URL, custom metadata)
+
+**Backend:**
+1. Receives Walrus blob ID
+2. Retrieves blob from Walrus aggregator
+3. Extracts encrypted object and session key from metadata
+4. Prepares transaction bytes for `seal_approve` function
+5. Uses Seal SDK to decrypt data with session key and transaction bytes
+6. Returns decrypted data (base64 encoded)
+
+**Security:**
+- Only the creator (the address that encrypted the data) can decrypt
+- Requires proper session key and transaction bytes
+- Identity verification prevents unauthorized decryption attempts
 
 ### Search & Analytics Flow
 
-1. Query **Nautilus** index via `/v1/search`
+1. Query indexing service via `/v1/search`
 2. Filter by creator, source, date, media type, AI status
 3. Get real-time statistics via `/v1/stats`
 4. Track verification trends and top creators
@@ -604,10 +730,21 @@ All images are normalized before hashing to ensure consistent verification:
 ## 🔌 API Endpoints
 
 ### Core Endpoints
-- `POST /v1/register` - Register new media attestation
+- `POST /v1/register` - Register new media attestation (with optional Seal encryption)
 - `POST /v1/verify` - Verify media hash
 
-### Nautilus Search Endpoints
+### Decryption Endpoints (Seal)
+- `POST /v1/decrypt/metadata` - Fetch encrypted metadata from Walrus
+  - Body: `{ walrusBlobId: string }`
+  - Returns: Encrypted object, session key, and identity
+- `POST /v1/decrypt/prepare` - Prepare decryption transaction bytes
+  - Body: `{ identity: string }` (creator address)
+  - Returns: Transaction bytes (base64) and package ID
+- `POST /v1/decrypt/execute` - Execute decryption
+  - Body: `{ encryptedObject: string, sessionKey: string, identity: string, transactionBytes: string }`
+  - Returns: Decrypted data (base64 encoded)
+
+### Search & Analytics Endpoints
 - `GET /v1/search` - Search attestations with filters
   - Query params: `creator`, `source`, `dateFrom`, `dateTo`, `mediaType`, `isAiGenerated`
 - `GET /v1/stats` - Get verification statistics
@@ -638,7 +775,7 @@ curl "http://localhost:3000/v1/creator/0x..."
 - [ ] AI detection integration
 - [ ] Reputation system for creators
 - [ ] Multi-chain support
-- [ ] Real-time Nautilus dashboard UI
+- [ ] Real-time analytics dashboard UI
 - [ ] Advanced analytics visualizations
 
 ## 🤝 Contributing

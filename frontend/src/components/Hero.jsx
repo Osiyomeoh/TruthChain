@@ -13,8 +13,8 @@ function Hero() {
           </h1>
           <p className="hero-description">
             Verify images and videos on social media platforms instantly. TruthChain provides 
-            decentralized, provable authenticity verification for any media using Walrus, 
-            Nautilus, and Sui blockchain. Stop deepfakes and misinformation at the source.
+            decentralized, provable authenticity verification for any media using Walrus 
+            and Sui blockchain. Stop deepfakes and misinformation at the source.
           </p>
           <div className="hero-buttons">
             <a href="#extension" className="btn btn-primary">
