@@ -77,12 +77,19 @@ function hashToBytes(hash: string): number[] {
 
 /**
  * Query the registry to find attestation address for a hash
+ * Retries with delays to handle transaction confirmation delays
  */
-async function findAttestationAddress(hash: string): Promise<string | null> {
+async function findAttestationAddress(hash: string, retries: number = 3, delayMs: number = 2000): Promise<string | null> {
   try {
     const hashBytes = hashToBytes(hash);
     const client = getSuiClient();
     const registryId = getRegistryObjectId();
+    const packageId = getPackageId();
+    
+    console.log(`🔍 [VERIFY] Looking up hash: ${hash.substring(0, 16)}...`);
+    console.log(`🔍 [VERIFY] Registry ID: ${registryId}`);
+    console.log(`🔍 [VERIFY] Package ID: ${packageId}`);
+    console.log(`🔍 [VERIFY] Hash bytes length: ${hashBytes.length} (expected 32)`);
     
     // Query the registry object
     const registry = await client.getObject({
@@ -94,70 +101,124 @@ async function findAttestationAddress(hash: string): Promise<string | null> {
     });
 
     if (!registry.data || registry.data.content?.dataType !== 'moveObject') {
-      console.error('Registry object not found or invalid');
+      console.error('❌ [VERIFY] Registry object not found or invalid');
       return null;
     }
 
     // The registry has a hash_to_id table (Table<vector<u8>, address>)
     // Tables in Sui are stored as dynamic fields
-    // The key type is vector<u8>, so we need to use the bytes array directly
+    // For vector<u8> keys, we need to use the bytes directly as a hex string
     
+    // Method 1: Try dynamic field lookup using vector<u8> key
+    // In Sui, vector<u8> keys in tables are stored as dynamic fields with hex encoding
     try {
-      // Try to get the dynamic field (table entry) using vector<u8> as key
+      // Convert hash bytes to hex string for dynamic field lookup
+      const hashHex = hashBytes.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // Try using the hex string directly (Sui might encode it this way)
       const dynamicField = await client.getDynamicFieldObject({
         parentId: registryId,
         name: {
-          type: '0x1::string::String', // Sui represents vector<u8> keys as String in dynamic fields
-          value: hashBytes.map(b => String.fromCharCode(b)).join(''), // Convert bytes to string
+          type: '0x1::hex::Hex', // Try Hex type first
+          value: hashHex,
         },
       });
 
       if (dynamicField.data && dynamicField.data.content?.dataType === 'moveObject') {
         const content = dynamicField.data.content as any;
-        // The value should be the attestation address
         const address = content.fields?.value || content.fields?.name?.value;
         if (address) {
+          console.log(`✅ [VERIFY] Found attestation via dynamic field: ${address}`);
           return address;
         }
       }
-    } catch (error) {
-      // Dynamic field lookup might use different format
-      console.log('Direct dynamic field lookup failed, trying events method:', error);
-    }
+    } catch (error: any) {
+      console.log(`⚠️ [VERIFY] Dynamic field lookup (Hex) failed: ${error.message}`);
+      
+      // Try with vector<u8> type directly
+      try {
+        const dynamicField = await client.getDynamicFieldObject({
+          parentId: registryId,
+          name: {
+            type: 'vector<u8>',
+            value: hashBytes,
+          },
+        });
 
-    // Alternative: Query events to find attestations
-    // Look for AttestationCreated events with matching hash
-    const packageId = process.env.PACKAGE_ID;
-    if (!packageId) {
-      console.error('PACKAGE_ID environment variable is required');
-      return null;
-    }
-
-    const events = await client.queryEvents({
-      query: {
-        MoveEventType: `${packageId}::media_attestation::AttestationCreated`,
-      },
-      limit: 100,
-      order: 'descending',
-    });
-
-    for (const event of events.data) {
-      if (event.parsedJson) {
-        const eventData = event.parsedJson as any;
-        // Compare hash (might need to convert format)
-        const eventHash = Array.isArray(eventData.media_hash) 
-          ? eventData.media_hash.map((b: number) => b.toString(16).padStart(2, '0')).join('')
-          : eventData.media_hash;
-        
-        if (eventHash.toLowerCase() === hash.toLowerCase()) {
-          return eventData.attestation_id;
+        if (dynamicField.data && dynamicField.data.content?.dataType === 'moveObject') {
+          const content = dynamicField.data.content as any;
+          const address = content.fields?.value || content.fields?.name?.value;
+          if (address) {
+            console.log(`✅ [VERIFY] Found attestation via dynamic field (vector<u8>): ${address}`);
+            return address;
+          }
         }
+      } catch (error2: any) {
+        console.log(`⚠️ [VERIFY] Dynamic field lookup (vector<u8>) failed: ${error2.message}`);
       }
     }
 
+    // Method 2: Query events to find attestations
+    // This is more reliable but slower
+    console.log(`🔍 [VERIFY] Trying event query method...`);
+    try {
+      const events = await client.queryEvents({
+        query: {
+          MoveEventType: `${packageId}::media_attestation::AttestationCreated`,
+        },
+        limit: 500, // Increased limit to find more recent events
+        order: 'descending',
+      });
+
+      console.log(`🔍 [VERIFY] Found ${events.data.length} AttestationCreated events`);
+
+      for (const event of events.data) {
+        if (event.parsedJson) {
+          const eventData = event.parsedJson as any;
+          // Convert event hash from bytes array to hex string
+          let eventHash: string;
+          if (Array.isArray(eventData.media_hash)) {
+            eventHash = eventData.media_hash
+              .map((b: number) => b.toString(16).padStart(2, '0'))
+              .join('')
+              .toLowerCase();
+          } else if (typeof eventData.media_hash === 'string') {
+            eventHash = eventData.media_hash.toLowerCase().replace('0x', '');
+          } else {
+            continue;
+          }
+          
+          const searchHash = hash.toLowerCase().replace('0x', '');
+          
+          if (eventHash === searchHash) {
+            console.log(`✅ [VERIFY] Found matching attestation in events: ${eventData.attestation_id}`);
+            return eventData.attestation_id;
+          }
+        }
+      }
+      
+      console.log(`⚠️ [VERIFY] No matching hash found in events`);
+    } catch (error: any) {
+      console.error(`❌ [VERIFY] Event query failed: ${error.message}`);
+    }
+
+    // If not found and we have retries left, wait and retry
+    if (retries > 0) {
+      console.log(`⏳ [VERIFY] Not found, retrying in ${delayMs}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      return findAttestationAddress(hash, retries - 1, delayMs);
+    }
+
+    console.log(`❌ [VERIFY] No attestation found for hash: ${hash}`);
     return null;
   } catch (error) {
-    console.error('Error finding attestation address:', error);
+    console.error('❌ [VERIFY] Error finding attestation address:', error);
+    // Retry on error if we have retries left
+    if (retries > 0) {
+      console.log(`⏳ [VERIFY] Error occurred, retrying in ${delayMs}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      return findAttestationAddress(hash, retries - 1, delayMs);
+    }
     return null;
   }
 }
@@ -212,24 +273,65 @@ async function getAttestationDetails(attestationAddress: string): Promise<MediaA
  */
 export async function verifyMediaHash(hash: string): Promise<MediaAttestation | null> {
   try {
-    console.log(`🔍 Querying Sui blockchain for hash: ${hash}`);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`🔍 [VERIFY] ===== VERIFICATION REQUEST =====`);
+    console.log(`🔍 [VERIFY] Hash: ${hash}`);
+    console.log(`🔍 [VERIFY] Hash length: ${hash.length} (expected 64)`);
+    console.log(`🔍 [VERIFY] Timestamp: ${new Date().toISOString()}`);
+    console.log('='.repeat(80));
     
-    // Find the attestation address
-    const attestationAddress = await findAttestationAddress(hash);
+    // Validate hash format
+    if (hash.length !== 64) {
+      console.error(`❌ [VERIFY] Invalid hash length: ${hash.length}, expected 64`);
+      return null;
+    }
+    
+    // Find the attestation address (with retries for transaction confirmation)
+    const attestationAddress = await findAttestationAddress(hash, 3, 2000);
     
     if (!attestationAddress) {
-      console.log(`❌ No attestation found for hash: ${hash}`);
+      console.log(`❌ [VERIFY] No attestation found for hash: ${hash}`);
+      console.log(`💡 [VERIFY] Possible reasons:`);
+      console.log(`   - Transaction not yet confirmed (wait a few seconds and try again)`);
+      console.log(`   - Hash was never registered`);
+      console.log(`   - Wrong network (check SUI_RPC_URL)`);
+      console.log(`   - Wrong registry/package ID`);
+      console.log('='.repeat(80) + '\n');
       return null;
     }
 
-    console.log(`✅ Found attestation at address: ${attestationAddress}`);
+    console.log(`✅ [VERIFY] Found attestation at address: ${attestationAddress}`);
     
     // Get the attestation details
     const attestation = await getAttestationDetails(attestationAddress);
     
+    if (!attestation) {
+      console.error(`❌ [VERIFY] Could not retrieve attestation details from address: ${attestationAddress}`);
+      return null;
+    }
+    
+    // Verify the hash matches (safety check)
+    if (attestation.media_hash.toLowerCase() !== hash.toLowerCase()) {
+      console.error(`❌ [VERIFY] Hash mismatch! Expected: ${hash}, Got: ${attestation.media_hash}`);
+      return null;
+    }
+    
+    console.log(`✅ [VERIFY] Verification successful!`);
+    console.log(`   📋 Attestation ID: ${attestation.attestation_id}`);
+    console.log(`   👤 Creator: ${attestation.creator}`);
+    console.log(`   📅 Created: ${new Date(attestation.created_at).toISOString()}`);
+    console.log(`   🔢 Verification count: ${attestation.verification_count}`);
+    console.log('='.repeat(80) + '\n');
+    
     return attestation;
   } catch (error) {
-    console.error('Error verifying media hash:', error);
+    console.error('❌ [VERIFY] Error verifying media hash:', error);
+    if (error instanceof Error) {
+      console.error(`   Error message: ${error.message}`);
+      if (error.stack) {
+        console.error(`   Stack trace: ${error.stack.split('\n').slice(0, 5).join('\n')}`);
+      }
+    }
     throw error;
   }
 }
